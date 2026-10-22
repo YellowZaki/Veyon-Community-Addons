@@ -1,0 +1,61 @@
+name: Build Veyon Internet Access Control Addon
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Qt 6
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.7.2'
+          arch: 'win64_mingw'
+          tools: 'tools_ninja tools_mingw1310'
+
+      - name: Checkout Veyon Core Headers
+        run: |
+          git clone --depth 1 --branch v4.11.4 https://github.com/veyon/veyon.git veyon-core
+
+      - name: Configure CMake
+        shell: bash
+        run: |
+          mkdir build
+          cd build
+          cmake ../internet-access-control \
+            -G "Ninja" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DVEYON_SOURCE_DIR=$(pwd)/../veyon-core
+
+      - name: Build Plugin DLL
+        shell: bash
+        run: |
+          cd build
+          cmake --build . --config Release
+
+      - name: Package Artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "dist" -Force
+          Copy-Item "build/internetaccesscontrol.dll" -Destination "dist/" -ErrorAction SilentlyContinue
+          Copy-Item "internet-access-control/scripts/install-plugin.ps1" -Destination "dist/"
+          Copy-Item "internet-access-control/scripts/uninstall-plugin.ps1" -Destination "dist/"
+          Copy-Item "internet-access-control/README.md" -Destination "dist/"
+          Compress-Archive -Path "dist/*" -DestinationPath "veyon-internet-access-control-win64.zip"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: veyon-internet-access-control-win64
+          path: veyon-internet-access-control-win64.zip
