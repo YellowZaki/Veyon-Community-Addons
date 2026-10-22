@@ -1,0 +1,52 @@
+# Build directories and artifacts
+build/
+build-*/
+bin/
+dist/
+*.zip
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+CMakeUserPresets.json
+Makefile
+*.ninja
+.ninja_*
+
+# Compiled Object files, Libraries, Binaries
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+*.exe
+*.a
+*.lib
+*.pdb
+*.ilk
+*.exp
+
+# Qt moc, uic, rcc generated files
+moc_*.cpp
+moc_*.h
+ui_*.h
+qrc_*.cpp
+*.qmlc
+*.jsc
+
+# IDEs and Editors
+.vs/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+*.user
+*.suo
+
+# OS generated files
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store

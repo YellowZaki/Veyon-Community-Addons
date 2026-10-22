@@ -43,7 +43,9 @@ else()
 	find_path(VEYON_INCLUDE_DIR
 		NAMES VeyonCore.h
 		PATHS
+			${VEYON_SOURCE_DIR}/core/src
 			${CMAKE_CURRENT_SOURCE_DIR}/../veyon-core-upstream/core/src
+			${CMAKE_CURRENT_SOURCE_DIR}/../veyon-core/core/src
 			${CMAKE_CURRENT_SOURCE_DIR}/../veyon/core/src
 			"C:/Program Files/Veyon/sdk/include"
 	)
