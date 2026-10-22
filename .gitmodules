@@ -1,8 +1,0 @@
-[submodule "veyon-addons-upstream"]
-	path = veyon-addons-upstream
-	url = https://github.com/veyon/addons.git
-	branch = v4.11.4
-[submodule "veyon-core-upstream"]
-	path = veyon-core-upstream
-	url = https://github.com/veyon/veyon.git
-	branch = v4.11.4

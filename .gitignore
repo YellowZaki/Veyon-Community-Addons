@@ -5,6 +5,12 @@ bin/
 dist/
 *.zip
 
+# Upstream and local reference clones
+veyon-addons-upstream/
+veyon-core-upstream/
+veyon-core/
+veyon/
+
 # CMake generated files
 CMakeCache.txt
 CMakeFiles/
