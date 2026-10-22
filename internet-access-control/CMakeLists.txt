@@ -65,8 +65,10 @@ else()
 		Qt6::Network
 	)
 
+	set(CMAKE_FIND_LIBRARY_SUFFIXES ".dll.a" ".a" ".lib" ".dll")
+
 	find_library(VEYON_CORE_LIB
-		NAMES veyon-core libveyon-core
+		NAMES veyon-core libveyon-core veyon-core.dll
 		PATHS
 			${CMAKE_CURRENT_SOURCE_DIR}/../veyon-bin
 			${CMAKE_CURRENT_BINARY_DIR}/../veyon-bin
@@ -75,8 +77,25 @@ else()
 			"C:/Program Files/Veyon/sdk/lib"
 	)
 
+	if(NOT VEYON_CORE_LIB)
+		find_file(VEYON_CORE_DLL
+			NAMES veyon-core.dll
+			PATHS
+				${CMAKE_CURRENT_SOURCE_DIR}/../veyon-bin
+				${CMAKE_CURRENT_BINARY_DIR}/../veyon-bin
+				${VEYON_SOURCE_DIR}
+				"C:/Program Files/Veyon"
+		)
+		if(VEYON_CORE_DLL)
+			set(VEYON_CORE_LIB "${VEYON_CORE_DLL}")
+		endif()
+	endif()
+
 	if(VEYON_CORE_LIB)
-		target_link_libraries(internetaccesscontrol PRIVATE ${VEYON_CORE_LIB})
+		message(STATUS "Found Veyon Core library: ${VEYON_CORE_LIB}")
+		target_link_libraries(internetaccesscontrol PRIVATE "${VEYON_CORE_LIB}")
+	else()
+		message(FATAL_ERROR "Veyon Core library NOT found! Cannot link plugin.")
 	endif()
 
 	if(WIN32)

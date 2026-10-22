@@ -31,7 +31,7 @@ jobs:
         run: |
           curl -sL -o veyon-setup.exe https://github.com/veyon/veyon/releases/download/v4.11.4/veyon-4.11.4.0-win64-setup.exe
           7z x veyon-setup.exe -oveyon-bin
-          find veyon-bin -name "*.dll" -exec cp {} veyon-bin/ \; 2>/dev/null || true
+          ls -la veyon-bin
 
       - name: Configure CMake
         shell: bash
@@ -49,7 +49,7 @@ jobs:
         shell: bash
         run: |
           cd build
-          cmake --build . --config Release
+          cmake --build . --config Release -v
 
       - name: Package Artifacts
         shell: pwsh
