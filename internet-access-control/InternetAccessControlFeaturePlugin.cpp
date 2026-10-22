@@ -17,7 +17,7 @@
 
 InternetAccessControlFeaturePlugin::InternetAccessControlFeaturePlugin( QObject* parent ) :
 	QObject( parent ),
-	m_configuration(),
+	m_configuration( &VeyonCore::config() ),
 	m_internetAccessControlFeature(
 		QStringLiteral( "InternetAccessControl" ),
 		Feature::Flag::Mode | Feature::Flag::AllComponents,
@@ -57,11 +57,11 @@ bool InternetAccessControlFeaturePlugin::controlFeature( Feature::Uid featureUid
 		vDebug() << "Starting Internet Access block on" << computerControlInterfaces.size() << "computer(s)";
 
 		FeatureMessage message{ featureUid, FeatureCommand::BlockInternet };
-		message.addArgument( argToString( Argument::BlockMode ), m_configuration.blockMode() );
-		message.addArgument( argToString( Argument::BlockedPorts ), m_configuration.blockedPorts() );
-		message.addArgument( argToString( Argument::AllowedSubnets ), m_configuration.allowedSubnets() );
-		message.addArgument( argToString( Argument::AllowedHosts ), m_configuration.allowedHosts() );
-		message.addArgument( argToString( Argument::BlockDns ), m_configuration.blockDnsTraffic() );
+		message.addArgument( Argument::BlockMode, m_configuration.blockMode() );
+		message.addArgument( Argument::BlockedPorts, m_configuration.blockedPorts() );
+		message.addArgument( Argument::AllowedSubnets, m_configuration.allowedSubnets() );
+		message.addArgument( Argument::AllowedHosts, m_configuration.allowedHosts() );
+		message.addArgument( Argument::BlockDns, m_configuration.blockDnsTraffic() );
 
 		sendFeatureMessage( message, computerControlInterfaces );
 		return true;
@@ -122,14 +122,17 @@ bool InternetAccessControlFeaturePlugin::handleFeatureMessage( VeyonWorkerInterf
 		case FeatureCommand::BlockInternet:
 		{
 			WindowsFirewallController::Config config;
-			const auto args = message.arguments();
 
 			config.mode = static_cast<WindowsFirewallController::BlockMode>(
-				args.value( argToString( Argument::BlockMode ), 0 ).toInt() );
-			config.blockedPorts = args.value( argToString( Argument::BlockedPorts ), QStringLiteral( "80,443,8080,8443" ) ).toString();
-			config.allowedSubnets = args.value( argToString( Argument::AllowedSubnets ), QString() ).toString();
-			config.allowedHosts = args.value( argToString( Argument::AllowedHosts ), QString() ).toString();
-			config.blockDns = args.value( argToString( Argument::BlockDns ), false ).toBool();
+				message.argument( Argument::BlockMode ).toInt() );
+			config.blockedPorts = message.argument( Argument::BlockedPorts ).toString();
+			if ( config.blockedPorts.isEmpty() )
+			{
+				config.blockedPorts = QStringLiteral( "80,443,8080,8443" );
+			}
+			config.allowedSubnets = message.argument( Argument::AllowedSubnets ).toString();
+			config.allowedHosts = message.argument( Argument::AllowedHosts ).toString();
+			config.blockDns = message.argument( Argument::BlockDns ).toBool();
 
 			vDebug() << "Worker applying firewall block rules...";
 			WindowsFirewallController::instance().blockInternet( config );
@@ -167,3 +170,5 @@ ConfigurationPage* InternetAccessControlFeaturePlugin::createConfigurationPage()
 {
 	return new InternetAccessControlConfigurationPage( m_configuration );
 }
+
+IMPLEMENT_CONFIG_PROXY(InternetAccessControlConfiguration)
