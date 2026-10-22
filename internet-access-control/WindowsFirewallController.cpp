@@ -16,6 +16,10 @@
 #include <comutil.h>
 #include <objbase.h>
 
+#ifndef NET_FW_IP_PROTOCOL_ANY
+#define NET_FW_IP_PROTOCOL_ANY static_cast<NET_FW_IP_PROTOCOL>(256)
+#endif
+
 #endif
 
 #include <QProcess>

@@ -10,6 +10,7 @@ veyon-addons-upstream/
 veyon-core-upstream/
 veyon-core/
 veyon/
+veyon-bin/
 
 # CMake generated files
 CMakeCache.txt

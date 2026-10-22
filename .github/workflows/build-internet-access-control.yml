@@ -26,6 +26,13 @@ jobs:
         run: |
           git clone --depth 1 --branch v4.11.4 https://github.com/veyon/veyon.git veyon-core
 
+      - name: Download Veyon Windows Binaries
+        shell: bash
+        run: |
+          curl -sL -o veyon-setup.exe https://github.com/veyon/veyon/releases/download/v4.11.4/veyon-4.11.4.0-win64-setup.exe
+          7z x veyon-setup.exe -oveyon-bin
+          find veyon-bin -name "*.dll" -exec cp {} veyon-bin/ \; 2>/dev/null || true
+
       - name: Configure CMake
         shell: bash
         run: |

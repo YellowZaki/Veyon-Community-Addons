@@ -50,6 +50,10 @@ else()
 			"C:/Program Files/Veyon/sdk/include"
 	)
 
+	target_include_directories(internetaccesscontrol PRIVATE
+		${CMAKE_CURRENT_SOURCE_DIR}/compat
+	)
+
 	if(VEYON_INCLUDE_DIR)
 		target_include_directories(internetaccesscontrol PRIVATE ${VEYON_INCLUDE_DIR})
 	endif()
@@ -60,6 +64,20 @@ else()
 		Qt6::Widgets
 		Qt6::Network
 	)
+
+	find_library(VEYON_CORE_LIB
+		NAMES veyon-core libveyon-core
+		PATHS
+			${CMAKE_CURRENT_SOURCE_DIR}/../veyon-bin
+			${CMAKE_CURRENT_BINARY_DIR}/../veyon-bin
+			${VEYON_SOURCE_DIR}
+			"C:/Program Files/Veyon"
+			"C:/Program Files/Veyon/sdk/lib"
+	)
+
+	if(VEYON_CORE_LIB)
+		target_link_libraries(internetaccesscontrol PRIVATE ${VEYON_CORE_LIB})
+	endif()
 
 	if(WIN32)
 		target_link_libraries(internetaccesscontrol PRIVATE ole32 oleaut32)
