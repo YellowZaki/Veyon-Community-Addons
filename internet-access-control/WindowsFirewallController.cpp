@@ -29,6 +29,8 @@
 
 #include "Logger.h"
 
+static const wchar_t* const RuleAllowVeyon = L"Veyon_IAC_Allow_Veyon";
+static const wchar_t* const RuleAllowLan = L"Veyon_IAC_Allow_LAN";
 static const wchar_t* const RuleBlockWebTcp = L"Veyon_IAC_Block_Web_TCP";
 static const wchar_t* const RuleBlockWebTcpV6 = L"Veyon_IAC_Block_Web_TCP_V6";
 static const wchar_t* const RuleBlockWebUdp = L"Veyon_IAC_Block_Web_UDP";
@@ -191,8 +193,13 @@ static HRESULT createAndAddRule( INetFwRules* pRules, const wchar_t* name, const
 static void removeRuleByName( INetFwRules* pRules, const wchar_t* name )
 {
 	BSTR bstrName = SysAllocString( name );
-	while ( SUCCEEDED( pRules->Remove( bstrName ) ) )
+	INetFwRule* pRule = nullptr;
+	int safety = 0;
+	while ( SUCCEEDED( pRules->Item( bstrName, &pRule ) ) && pRule && ++safety <= 10 )
 	{
+		pRule->Release();
+		pRule = nullptr;
+		pRules->Remove( bstrName );
 	}
 	SysFreeString( bstrName );
 }
@@ -214,85 +221,70 @@ bool WindowsFirewallController::blockViaCom( const Config& config )
 		return false;
 	}
 
-	const std::wstring portsW = config.blockedPorts.toStdWString();
+	bool allRulesAdded = true;
 
 	if ( config.mode == BlockMode::WebPortsOnly )
 	{
-		// Block TCP web ports to Internet (IPv4 & IPv6)
-		createAndAddRule( pRules, RuleBlockWebTcp,
-						  L"Veyon Internet Access Control - Block Outbound Web (TCP IPv4)",
-						  NET_FW_ACTION_BLOCK, NET_FW_IP_PROTOCOL_TCP,
-						  portsW.c_str(), DefaultInternetRangesV4 );
+		QString ports = config.blockedPorts;
+		if ( ports.trimmed().isEmpty() )
+		{
+			ports = QStringLiteral( "80,443,8080,8443" );
+		}
+		const std::wstring portsW = ports.toStdWString();
 
-		createAndAddRule( pRules, RuleBlockWebTcpV6,
-						  L"Veyon Internet Access Control - Block Outbound Web (TCP IPv6)",
-						  NET_FW_ACTION_BLOCK, NET_FW_IP_PROTOCOL_TCP,
-						  portsW.c_str(), DefaultInternetRangesV6 );
+		// Block TCP web ports to ALL destinations (Veyon uses port 11100, SMB 445, RDP 3389)
+		HRESULT hrTcp = createAndAddRule( pRules, RuleBlockWebTcp,
+										  L"Veyon Internet Access Control - Block Outbound Web (TCP)",
+										  NET_FW_ACTION_BLOCK, NET_FW_IP_PROTOCOL_TCP,
+										  portsW.c_str(), L"*" );
 
-		// Block UDP web ports (HTTP/3 / QUIC) to Internet (IPv4 & IPv6)
-		createAndAddRule( pRules, RuleBlockWebUdp,
-						  L"Veyon Internet Access Control - Block Outbound Web (UDP IPv4)",
-						  NET_FW_ACTION_BLOCK, NET_FW_IP_PROTOCOL_UDP,
-						  L"443,80", DefaultInternetRangesV4 );
+		// Block UDP web ports (HTTP/3 / QUIC) to ALL destinations
+		HRESULT hrUdp = createAndAddRule( pRules, RuleBlockWebUdp,
+										  L"Veyon Internet Access Control - Block Outbound Web (UDP QUIC)",
+										  NET_FW_ACTION_BLOCK, NET_FW_IP_PROTOCOL_UDP,
+										  L"443,80", L"*" );
 
-		createAndAddRule( pRules, RuleBlockWebUdpV6,
-						  L"Veyon Internet Access Control - Block Outbound Web (UDP IPv6)",
-						  NET_FW_ACTION_BLOCK, NET_FW_IP_PROTOCOL_UDP,
-						  L"443,80", DefaultInternetRangesV6 );
+		if ( FAILED( hrTcp ) || FAILED( hrUdp ) )
+		{
+			allRulesAdded = false;
+		}
 	}
 	else
 	{
-		// Block all outbound traffic outside local subnet (IPv4 & IPv6)
-		createAndAddRule( pRules, RuleBlockAllNonLan,
-						  L"Veyon Internet Access Control - Block All Outbound Non-LAN (IPv4)",
-						  NET_FW_ACTION_BLOCK, NET_FW_IP_PROTOCOL_ANY,
-						  nullptr, DefaultInternetRangesV4 );
+		// Block all outbound traffic outside local subnet
+		HRESULT hrAllV4 = createAndAddRule( pRules, RuleBlockAllNonLan,
+											L"Veyon Internet Access Control - Block All Outbound Non-LAN (IPv4)",
+											NET_FW_ACTION_BLOCK, NET_FW_IP_PROTOCOL_ANY,
+											nullptr, DefaultInternetRangesV4 );
 
-		createAndAddRule( pRules, RuleBlockAllNonLanV6,
-						  L"Veyon Internet Access Control - Block All Outbound Non-LAN (IPv6)",
-						  NET_FW_ACTION_BLOCK, NET_FW_IP_PROTOCOL_ANY,
-						  nullptr, DefaultInternetRangesV6 );
+		HRESULT hrAllV6 = createAndAddRule( pRules, RuleBlockAllNonLanV6,
+											L"Veyon Internet Access Control - Block All Outbound Non-LAN (IPv6)",
+											NET_FW_ACTION_BLOCK, NET_FW_IP_PROTOCOL_ANY,
+											nullptr, DefaultInternetRangesV6 );
+
+		if ( FAILED( hrAllV4 ) || FAILED( hrAllV6 ) )
+		{
+			allRulesAdded = false;
+		}
 	}
 
-	// Optional DNS block to prevent external DNS resolution / tunnels
+	// Optional DNS block
 	if ( config.blockDns )
 	{
-		createAndAddRule( pRules, RuleBlockDns,
-						  L"Veyon Internet Access Control - Block External DNS (IPv4)",
-						  NET_FW_ACTION_BLOCK, NET_FW_IP_PROTOCOL_UDP,
-						  L"53", DefaultInternetRangesV4 );
-
-		createAndAddRule( pRules, RuleBlockDnsV6,
-						  L"Veyon Internet Access Control - Block External DNS (IPv6)",
-						  NET_FW_ACTION_BLOCK, NET_FW_IP_PROTOCOL_UDP,
-						  L"53", DefaultInternetRangesV6 );
-	}
-
-	// Add Whitelist rules if configured
-	if ( !config.allowedHosts.trimmed().isEmpty() )
-	{
-		const auto hosts = config.allowedHosts.split( QRegularExpression( "[,;\\s]+" ), Qt::SkipEmptyParts );
-		int index = 0;
-		for ( const auto& host : hosts )
+		HRESULT hrDns = createAndAddRule( pRules, RuleBlockDns,
+										  L"Veyon Internet Access Control - Block Outbound DNS",
+										  NET_FW_ACTION_BLOCK, NET_FW_IP_PROTOCOL_UDP,
+										  L"53", L"*" );
+		if ( FAILED( hrDns ) )
 		{
-			QHostInfo hostInfo = QHostInfo::fromName( host.trimmed() );
-			for ( const auto& addr : hostInfo.addresses() )
-			{
-				const auto addrStr = addr.toString().toStdWString();
-				const auto ruleName = QString( "Veyon_IAC_Allow_Host_%1" ).arg( ++index ).toStdWString();
-
-				createAndAddRule( pRules, ruleName.c_str(),
-								  L"Veyon Internet Access Control - Allowed Host Exception",
-								  NET_FW_ACTION_ALLOW, NET_FW_IP_PROTOCOL_ANY,
-								  nullptr, addrStr.c_str() );
-			}
+			allRulesAdded = false;
 		}
 	}
 
 	pRules->Release();
 	pPolicy->Release();
 
-	return true;
+	return allRulesAdded;
 }
 
 bool WindowsFirewallController::unblockViaCom()
@@ -312,6 +304,8 @@ bool WindowsFirewallController::unblockViaCom()
 		return false;
 	}
 
+	removeRuleByName( pRules, RuleAllowVeyon );
+	removeRuleByName( pRules, RuleAllowLan );
 	removeRuleByName( pRules, RuleBlockWebTcp );
 	removeRuleByName( pRules, RuleBlockWebTcpV6 );
 	removeRuleByName( pRules, RuleBlockWebUdp );
@@ -321,8 +315,8 @@ bool WindowsFirewallController::unblockViaCom()
 	removeRuleByName( pRules, RuleBlockDns );
 	removeRuleByName( pRules, RuleBlockDnsV6 );
 
-	// Remove whitelist host exceptions
-	for ( int i = 1; i <= 64; ++i )
+	// Remove whitelist host exceptions if any
+	for ( int i = 1; i <= 16; ++i )
 	{
 		const auto ruleName = QString( "Veyon_IAC_Allow_Host_%1" ).arg( i ).toStdWString();
 		removeRuleByName( pRules, ruleName.c_str() );
@@ -378,20 +372,6 @@ bool WindowsFirewallController::isBlockedViaCom() const
 		SysFreeString( bstrAllNonLan );
 	}
 
-	if ( !blocked )
-	{
-		BSTR bstrWebTcpV6 = SysAllocString( RuleBlockWebTcpV6 );
-		if ( SUCCEEDED( pRules->Item( bstrWebTcpV6, &pRule ) ) && pRule )
-		{
-			VARIANT_BOOL enabled = VARIANT_FALSE;
-			pRule->get_Enabled( &enabled );
-			blocked = ( enabled == VARIANT_TRUE );
-			pRule->Release();
-			pRule = nullptr;
-		}
-		SysFreeString( bstrWebTcpV6 );
-	}
-
 	pRules->Release();
 	pPolicy->Release();
 
@@ -402,52 +382,55 @@ bool WindowsFirewallController::isBlockedViaCom() const
 
 bool WindowsFirewallController::blockViaNetsh( const Config& config )
 {
-	const QString rangeV4 = QString::fromWCharArray( DefaultInternetRangesV4 );
-	const QString rangeV6 = QString::fromWCharArray( DefaultInternetRangesV6 );
-
 	if ( config.mode == BlockMode::WebPortsOnly )
 	{
+		QString ports = config.blockedPorts;
+		if ( ports.trimmed().isEmpty() )
+		{
+			ports = QStringLiteral("80,443,8080,8443");
+		}
 		QProcess::execute( QStringLiteral("netsh"),
 			{ QStringLiteral("advfirewall"), QStringLiteral("firewall"), QStringLiteral("add"),
 			  QStringLiteral("rule"), QStringLiteral("name=Veyon_IAC_Block_Web_TCP"),
 			  QStringLiteral("dir=out"), QStringLiteral("action=block"),
-			  QStringLiteral("protocol=TCP"), QStringLiteral("remoteport=%1").arg(config.blockedPorts),
-			  QStringLiteral("remoteip=%1").arg(rangeV4), QStringLiteral("enable=yes") } );
-
-		QProcess::execute( QStringLiteral("netsh"),
-			{ QStringLiteral("advfirewall"), QStringLiteral("firewall"), QStringLiteral("add"),
-			  QStringLiteral("rule"), QStringLiteral("name=Veyon_IAC_Block_Web_TCP_V6"),
-			  QStringLiteral("dir=out"), QStringLiteral("action=block"),
-			  QStringLiteral("protocol=TCP"), QStringLiteral("remoteport=%1").arg(config.blockedPorts),
-			  QStringLiteral("remoteip=%1").arg(rangeV6), QStringLiteral("enable=yes") } );
+			  QStringLiteral("protocol=TCP"), QStringLiteral("remoteport=%1").arg(ports),
+			  QStringLiteral("remoteip=any"), QStringLiteral("enable=yes") } );
 
 		QProcess::execute( QStringLiteral("netsh"),
 			{ QStringLiteral("advfirewall"), QStringLiteral("firewall"), QStringLiteral("add"),
 			  QStringLiteral("rule"), QStringLiteral("name=Veyon_IAC_Block_Web_UDP"),
 			  QStringLiteral("dir=out"), QStringLiteral("action=block"),
 			  QStringLiteral("protocol=UDP"), QStringLiteral("remoteport=443,80"),
-			  QStringLiteral("remoteip=%1").arg(rangeV4), QStringLiteral("enable=yes") } );
-
-		QProcess::execute( QStringLiteral("netsh"),
-			{ QStringLiteral("advfirewall"), QStringLiteral("firewall"), QStringLiteral("add"),
-			  QStringLiteral("rule"), QStringLiteral("name=Veyon_IAC_Block_Web_UDP_V6"),
-			  QStringLiteral("dir=out"), QStringLiteral("action=block"),
-			  QStringLiteral("protocol=UDP"), QStringLiteral("remoteport=443,80"),
-			  QStringLiteral("remoteip=%1").arg(rangeV6), QStringLiteral("enable=yes") } );
+			  QStringLiteral("remoteip=any"), QStringLiteral("enable=yes") } );
 	}
 	else
 	{
+		const QString rangeV4 = QString::fromWCharArray( DefaultInternetRangesV4 );
+		const QString rangeV6 = QString::fromWCharArray( DefaultInternetRangesV6 );
+
 		QProcess::execute( QStringLiteral("netsh"),
 			{ QStringLiteral("advfirewall"), QStringLiteral("firewall"), QStringLiteral("add"),
 			  QStringLiteral("rule"), QStringLiteral("name=Veyon_IAC_Block_All_NonLAN"),
 			  QStringLiteral("dir=out"), QStringLiteral("action=block"),
-			  QStringLiteral("remoteip=%1").arg(rangeV4), QStringLiteral("enable=yes") } );
+			  QStringLiteral("protocol=ANY"), QStringLiteral("remoteip=%1").arg(rangeV4),
+			  QStringLiteral("enable=yes") } );
 
 		QProcess::execute( QStringLiteral("netsh"),
 			{ QStringLiteral("advfirewall"), QStringLiteral("firewall"), QStringLiteral("add"),
 			  QStringLiteral("rule"), QStringLiteral("name=Veyon_IAC_Block_All_NonLAN_V6"),
 			  QStringLiteral("dir=out"), QStringLiteral("action=block"),
-			  QStringLiteral("remoteip=%1").arg(rangeV6), QStringLiteral("enable=yes") } );
+			  QStringLiteral("protocol=ANY"), QStringLiteral("remoteip=%1").arg(rangeV6),
+			  QStringLiteral("enable=yes") } );
+	}
+
+	if ( config.blockDns )
+	{
+		QProcess::execute( QStringLiteral("netsh"),
+			{ QStringLiteral("advfirewall"), QStringLiteral("firewall"), QStringLiteral("add"),
+			  QStringLiteral("rule"), QStringLiteral("name=Veyon_IAC_Block_DNS"),
+			  QStringLiteral("dir=out"), QStringLiteral("action=block"),
+			  QStringLiteral("protocol=UDP"), QStringLiteral("remoteport=53"),
+			  QStringLiteral("remoteip=any"), QStringLiteral("enable=yes") } );
 	}
 
 	return true;
@@ -456,6 +439,8 @@ bool WindowsFirewallController::blockViaNetsh( const Config& config )
 bool WindowsFirewallController::unblockViaNetsh()
 {
 	const QStringList ruleNames = {
+		QStringLiteral("Veyon_IAC_Allow_Veyon"),
+		QStringLiteral("Veyon_IAC_Allow_LAN"),
 		QStringLiteral("Veyon_IAC_Block_Web_TCP"),
 		QStringLiteral("Veyon_IAC_Block_Web_TCP_V6"),
 		QStringLiteral("Veyon_IAC_Block_Web_UDP"),
