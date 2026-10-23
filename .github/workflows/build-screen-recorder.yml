@@ -1,0 +1,68 @@
+name: Build Veyon Screen Recorder Addon
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Qt 6
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.7.2'
+          arch: 'win64_mingw'
+          tools: 'tools_ninja tools_mingw1310'
+
+      - name: Checkout Veyon Core Headers
+        run: |
+          git clone --depth 1 --branch v4.11.4 https://github.com/veyon/veyon.git veyon-core
+
+      - name: Download Veyon Windows Binaries
+        shell: bash
+        run: |
+          curl -sL -o veyon-setup.exe https://github.com/veyon/veyon/releases/download/v4.11.4/veyon-4.11.4.0-win64-setup.exe
+          7z x veyon-setup.exe -oveyon-bin
+          ls -la veyon-bin
+
+      - name: Configure CMake
+        shell: bash
+        run: |
+          mkdir build
+          cd build
+          cmake ../screen-recorder \
+            -G "Ninja" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DVEYON_SOURCE_DIR=$(pwd)/../veyon-core
+
+      - name: Build Plugin DLL
+        shell: bash
+        run: |
+          cd build
+          cmake --build . --config Release -v
+
+      - name: Package Artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "dist" -Force
+          Copy-Item "build/screenrecorder.dll" -Destination "dist/" -ErrorAction SilentlyContinue
+          Copy-Item "screen-recorder/scripts/install-plugin.ps1" -Destination "dist/"
+          Copy-Item "screen-recorder/scripts/uninstall-plugin.ps1" -Destination "dist/"
+          Copy-Item "screen-recorder/README.md" -Destination "dist/"
+          Compress-Archive -Path "dist/*" -DestinationPath "veyon-screen-recorder-win64.zip"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: veyon-screen-recorder-win64
+          path: veyon-screen-recorder-win64.zip

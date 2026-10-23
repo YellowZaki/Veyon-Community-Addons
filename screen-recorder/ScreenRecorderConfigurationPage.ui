@@ -1,0 +1,278 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ScreenRecorderConfigurationPage</class>
+ <widget class="QWidget" name="ScreenRecorderConfigurationPage">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>540</width>
+    <height>520</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Screen recorder</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="QGroupBox" name="outputSettingsGroupBox">
+     <property name="title">
+      <string>Output settings</string>
+     </property>
+     <layout class="QGridLayout" name="gridLayout_output">
+      <item row="0" column="0">
+       <widget class="QLabel" name="label_outputDirectory">
+        <property name="text">
+         <string>Output directory:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <layout class="QHBoxLayout" name="outputDirLayout">
+        <item>
+         <widget class="QLineEdit" name="outputDirectory">
+          <property name="placeholderText">
+           <string>Default: Videos/Veyon Recordings</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="browseButton">
+          <property name="text">
+           <string>Browse…</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item row="1" column="0" colspan="2">
+       <widget class="QCheckBox" name="saveToComputerSubdirectories">
+        <property name="text">
+         <string>Save to computer-specific subdirectories</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QCheckBox" name="useFixedResolution">
+        <property name="text">
+         <string>Use fixed resolution</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <layout class="QHBoxLayout" name="resolutionLayout">
+        <item>
+         <widget class="QSpinBox" name="resolutionWidth">
+          <property name="minimum">
+           <number>320</number>
+          </property>
+          <property name="maximum">
+           <number>7680</number>
+          </property>
+          <property name="singleStep">
+           <number>80</number>
+          </property>
+          <property name="value">
+           <number>1920</number>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="label_x">
+          <property name="text">
+           <string>x</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="resolutionHeight">
+          <property name="minimum">
+           <number>240</number>
+          </property>
+          <property name="maximum">
+           <number>4320</number>
+          </property>
+          <property name="singleStep">
+           <number>60</number>
+          </property>
+          <property name="value">
+           <number>1080</number>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QCheckBox" name="keepAspectRatio">
+          <property name="text">
+           <string>Keep aspect ratio</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item row="3" column="0">
+       <widget class="QCheckBox" name="useFixedFramerate">
+        <property name="text">
+         <string>Use fixed framerate</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <layout class="QHBoxLayout" name="framerateLayout">
+        <item>
+         <widget class="QSpinBox" name="framesPerSecond">
+          <property name="minimum">
+           <number>1</number>
+          </property>
+          <property name="maximum">
+           <number>60</number>
+          </property>
+          <property name="value">
+           <number>15</number>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="label_fps">
+          <property name="text">
+           <string>frames per second</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="framerateSpacer">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="encodingSettingsGroupBox">
+     <property name="title">
+      <string>Encoding settings</string>
+     </property>
+     <layout class="QGridLayout" name="gridLayout_encoding">
+      <item row="0" column="0">
+       <widget class="QLabel" name="label_format">
+        <property name="text">
+         <string>Format:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QComboBox" name="format">
+        <item>
+         <property name="text">
+          <string>Standard MP4 (H.264)</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Motion JPEG (AVI)</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="label_bitrate">
+        <property name="text">
+         <string>Bitrate:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <layout class="QHBoxLayout" name="bitrateLayout">
+        <item>
+         <widget class="QSpinBox" name="bitrate">
+          <property name="minimum">
+           <number>200</number>
+          </property>
+          <property name="maximum">
+           <number>50000</number>
+          </property>
+          <property name="singleStep">
+           <number>500</number>
+          </property>
+          <property name="value">
+           <number>2500</number>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="label_kbps">
+          <property name="text">
+           <string>kbps</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="bitrateSpacer">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="otherSettingsGroupBox">
+     <property name="title">
+      <string>Other settings</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_other">
+      <item>
+       <widget class="QCheckBox" name="notifyUsers">
+        <property name="text">
+         <string>Notify users when their screen is recorded</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>40</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

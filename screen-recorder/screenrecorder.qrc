@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/screenrecorder">
+        <file>resources/media-record.png</file>
+        <file>resources/media-record-active.png</file>
+        <file>resources/screenrecorder.png</file>
+    </qresource>
+</RCC>
