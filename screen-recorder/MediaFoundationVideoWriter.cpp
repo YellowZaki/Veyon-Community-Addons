@@ -256,7 +256,7 @@ void MediaFoundationVideoWriter::close()
 	{
 		if ( m_initialized )
 		{
-			m_sinkWriter->DoFinalize();
+			m_sinkWriter->Finalize();
 		}
 		m_sinkWriter->Release();
 		m_sinkWriter = nullptr;

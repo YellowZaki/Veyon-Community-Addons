@@ -122,10 +122,14 @@ QString ScreenRecorderFeaturePlugin::generateOutputFilePath( const QString& base
 															const ComputerControlInterface::Pointer& controlInterface,
 															const QString& extension ) const
 {
-	QString compName = controlInterface->computer().name().trimmed();
+	QString compName = controlInterface->computerName().trimmed();
 	if ( compName.isEmpty() )
 	{
-		compName = controlInterface->computer().hostAddress().trimmed();
+		compName = controlInterface->computer().displayName().trimmed();
+	}
+	if ( compName.isEmpty() )
+	{
+		compName = controlInterface->computer().hostAddress().toString().trimmed();
 	}
 	if ( compName.isEmpty() )
 	{
@@ -182,7 +186,15 @@ bool ScreenRecorderFeaturePlugin::startRecording( VeyonMasterInterface* master,
 
 		ScreenRecorderEncodingWorker::Options opts;
 		opts.filePath = generateOutputFilePath( baseDir, controlInterface, extension );
-		opts.computerName = controlInterface->computer().name();
+		opts.computerName = controlInterface->computerName();
+		if ( opts.computerName.isEmpty() )
+		{
+			opts.computerName = controlInterface->computer().displayName();
+		}
+		if ( opts.computerName.isEmpty() )
+		{
+			opts.computerName = controlInterface->computer().hostAddress().toString();
+		}
 		opts.format = static_cast<ScreenRecorderEncodingWorker::Format>( m_configuration.format() );
 		opts.fps = fps;
 		opts.bitrateKbps = m_configuration.bitrate();
