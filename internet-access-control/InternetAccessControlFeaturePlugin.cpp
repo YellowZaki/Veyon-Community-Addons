@@ -29,14 +29,13 @@ InternetAccessControlFeaturePlugin::InternetAccessControlFeaturePlugin( QObject*
 		QStringLiteral( ":/internetaccesscontrol/resources/internet-web.png" ) ),
 	m_features( { m_internetAccessControlFeature } )
 {
-	if ( VeyonCore::component() == VeyonCore::Component::Service ||
-		 VeyonCore::component() == VeyonCore::Component::Server )
+	if ( VeyonCore::component() == VeyonCore::Component::Server )
 	{
 		connect( VeyonCore::instance(), &VeyonCore::initialized, this, [this]() {
-			if ( m_configuration.autoUnblockOnExit() )
+			if ( m_configuration.autoUnblockOnExit() && WindowsFirewallController::instance().isInternetBlocked() )
 			{
-				vDebug() << "Component initialized: performing startup firewall cleanup";
-				WindowsFirewallController::instance().cleanUp();
+				vDebug() << "Server initialized: clearing existing internet block";
+				WindowsFirewallController::instance().unblockInternet();
 			}
 		} );
 	}
@@ -44,9 +43,11 @@ InternetAccessControlFeaturePlugin::InternetAccessControlFeaturePlugin( QObject*
 
 InternetAccessControlFeaturePlugin::~InternetAccessControlFeaturePlugin()
 {
-	if ( m_configuration.autoUnblockOnExit() )
+	if ( VeyonCore::component() == VeyonCore::Component::Server &&
+		 m_configuration.autoUnblockOnExit() &&
+		 WindowsFirewallController::instance().isInternetBlocked() )
 	{
-		WindowsFirewallController::instance().cleanUp();
+		WindowsFirewallController::instance().unblockInternet();
 	}
 }
 

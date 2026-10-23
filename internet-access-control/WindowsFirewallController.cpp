@@ -110,11 +110,7 @@ bool WindowsFirewallController::isInternetBlocked() const
 
 void WindowsFirewallController::cleanUp()
 {
-	m_isBlocked = false;
-#ifdef Q_OS_WIN
-	unblockViaCom();
-	unblockViaNetsh();
-#endif
+	unblockInternet();
 }
 
 #ifdef Q_OS_WIN
