@@ -29,15 +29,24 @@ InternetAccessControlFeaturePlugin::InternetAccessControlFeaturePlugin( QObject*
 		QStringLiteral( ":/internetaccesscontrol/resources/internet-web.png" ) ),
 	m_features( { m_internetAccessControlFeature } )
 {
-	if ( VeyonCore::component() == VeyonCore::Component::Service )
+	if ( VeyonCore::component() == VeyonCore::Component::Service ||
+		 VeyonCore::component() == VeyonCore::Component::Server )
 	{
 		connect( VeyonCore::instance(), &VeyonCore::initialized, this, [this]() {
 			if ( m_configuration.autoUnblockOnExit() )
 			{
-				vDebug() << "Service initialized: performing startup firewall cleanup";
+				vDebug() << "Component initialized: performing startup firewall cleanup";
 				WindowsFirewallController::instance().cleanUp();
 			}
 		} );
+	}
+}
+
+InternetAccessControlFeaturePlugin::~InternetAccessControlFeaturePlugin()
+{
+	if ( m_configuration.autoUnblockOnExit() )
+	{
+		WindowsFirewallController::instance().cleanUp();
 	}
 }
 
@@ -83,6 +92,7 @@ bool InternetAccessControlFeaturePlugin::handleFeatureMessage( VeyonServerInterf
 															   const MessageContext& messageContext,
 															   const FeatureMessage& message )
 {
+	Q_UNUSED( server )
 	Q_UNUSED( messageContext )
 
 	if ( message.featureUid() == m_internetAccessControlFeature.uid() )
@@ -91,38 +101,14 @@ bool InternetAccessControlFeaturePlugin::handleFeatureMessage( VeyonServerInterf
 		{
 			vDebug() << "Server received UnblockInternet command";
 			WindowsFirewallController::instance().unblockInternet();
-
-			if ( server.featureWorkerManager().isWorkerRunning( message.featureUid() ) )
-			{
-				server.featureWorkerManager().sendMessageToManagedSystemWorker( message );
-			}
 			return true;
 		}
 
 		if ( message.command<FeatureCommand>() == FeatureCommand::BlockInternet )
 		{
-			vDebug() << "Server received BlockInternet command, delegating to system worker";
-			server.featureWorkerManager().sendMessageToManagedSystemWorker( message );
-			return true;
-		}
-	}
+			vDebug() << "Server received BlockInternet command, applying firewall rules directly";
 
-	return false;
-}
-
-bool InternetAccessControlFeaturePlugin::handleFeatureMessage( VeyonWorkerInterface& worker,
-															   const FeatureMessage& message )
-{
-	Q_UNUSED( worker )
-
-	if ( message.featureUid() == m_internetAccessControlFeature.uid() )
-	{
-		switch ( message.command<FeatureCommand>() )
-		{
-		case FeatureCommand::BlockInternet:
-		{
 			WindowsFirewallController::Config config;
-
 			config.mode = static_cast<WindowsFirewallController::BlockMode>(
 				message.argument( Argument::BlockMode ).toInt() );
 			config.blockedPorts = message.argument( Argument::BlockedPorts ).toString();
@@ -134,33 +120,30 @@ bool InternetAccessControlFeaturePlugin::handleFeatureMessage( VeyonWorkerInterf
 			config.allowedHosts = message.argument( Argument::AllowedHosts ).toString();
 			config.blockDns = message.argument( Argument::BlockDns ).toBool();
 
-			vDebug() << "Worker applying firewall block rules...";
 			WindowsFirewallController::instance().blockInternet( config );
 			return true;
-		}
-
-		case FeatureCommand::UnblockInternet:
-		{
-			vDebug() << "Worker removing firewall block rules...";
-			WindowsFirewallController::instance().unblockInternet();
-			QCoreApplication::quit();
-			return true;
-		}
-
-		default:
-			break;
 		}
 	}
 
 	return false;
 }
 
+bool InternetAccessControlFeaturePlugin::handleFeatureMessage( VeyonWorkerInterface& worker,
+															   const FeatureMessage& message )
+{
+	Q_UNUSED( worker )
+	Q_UNUSED( message )
+
+	return false;
+}
+
 bool InternetAccessControlFeaturePlugin::isFeatureActive( VeyonServerInterface& server, Feature::Uid featureUid ) const
 {
+	Q_UNUSED( server )
+
 	if ( featureUid == m_internetAccessControlFeature.uid() )
 	{
-		return WindowsFirewallController::instance().isInternetBlocked() ||
-			   server.featureWorkerManager().isWorkerRunning( featureUid );
+		return WindowsFirewallController::instance().isInternetBlocked();
 	}
 
 	return false;

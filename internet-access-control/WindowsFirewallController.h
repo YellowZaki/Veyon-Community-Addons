@@ -49,5 +49,5 @@ private:
 	bool blockViaNetsh( const Config& config );
 	bool unblockViaNetsh();
 
-	QString getInternetIpRanges( const QString& allowedSubnets ) const;
+	bool m_isBlocked = false;
 };

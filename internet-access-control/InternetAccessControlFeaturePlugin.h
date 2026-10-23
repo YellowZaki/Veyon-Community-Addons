@@ -31,7 +31,7 @@ public:
 	Q_ENUM( Argument )
 
 	explicit InternetAccessControlFeaturePlugin( QObject* parent = nullptr );
-	~InternetAccessControlFeaturePlugin() override = default;
+	~InternetAccessControlFeaturePlugin() override;
 
 	Plugin::Uid uid() const override
 	{
