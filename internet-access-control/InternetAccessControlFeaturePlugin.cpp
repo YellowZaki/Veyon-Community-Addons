@@ -65,14 +65,15 @@ bool InternetAccessControlFeaturePlugin::controlFeature( Feature::Uid featureUid
 	{
 		vDebug() << "Starting Internet Access block on" << computerControlInterfaces.size() << "computer(s)";
 
-		FeatureMessage message{ featureUid, FeatureCommand::BlockInternet };
-		message.addArgument( Argument::BlockMode, m_configuration.blockMode() );
-		message.addArgument( Argument::BlockedPorts, m_configuration.blockedPorts() );
-		message.addArgument( Argument::AllowedSubnets, m_configuration.allowedSubnets() );
-		message.addArgument( Argument::AllowedHosts, m_configuration.allowedHosts() );
-		message.addArgument( Argument::BlockDns, m_configuration.blockDnsTraffic() );
+		const FeatureMessage message{ featureUid, FeatureCommand::BlockInternet };
+		for ( const auto& controlInterface : computerControlInterfaces )
+		{
+			if ( controlInterface )
+			{
+				controlInterface->sendFeatureMessage( message );
+			}
+		}
 
-		sendFeatureMessage( message, computerControlInterfaces );
 		return true;
 	}
 
@@ -80,8 +81,15 @@ bool InternetAccessControlFeaturePlugin::controlFeature( Feature::Uid featureUid
 	{
 		vDebug() << "Stopping Internet Access block on" << computerControlInterfaces.size() << "computer(s)";
 
-		FeatureMessage message{ featureUid, FeatureCommand::UnblockInternet };
-		sendFeatureMessage( message, computerControlInterfaces );
+		const FeatureMessage message{ featureUid, FeatureCommand::UnblockInternet };
+		for ( const auto& controlInterface : computerControlInterfaces )
+		{
+			if ( controlInterface )
+			{
+				controlInterface->sendFeatureMessage( message );
+			}
+		}
+
 		return true;
 	}
 
@@ -109,16 +117,56 @@ bool InternetAccessControlFeaturePlugin::handleFeatureMessage( VeyonServerInterf
 			vDebug() << "Server received BlockInternet command, applying firewall rules directly";
 
 			WindowsFirewallController::Config config;
-			config.mode = static_cast<WindowsFirewallController::BlockMode>(
-				message.argument( Argument::BlockMode ).toInt() );
-			config.blockedPorts = message.argument( Argument::BlockedPorts ).toString();
+			if ( message.hasArgument( Argument::BlockMode ) )
+			{
+				config.mode = static_cast<WindowsFirewallController::BlockMode>(
+					message.argument( Argument::BlockMode ).toInt() );
+			}
+			else
+			{
+				config.mode = static_cast<WindowsFirewallController::BlockMode>( m_configuration.blockMode() );
+			}
+
+			if ( message.hasArgument( Argument::BlockedPorts ) )
+			{
+				config.blockedPorts = message.argument( Argument::BlockedPorts ).toString();
+			}
+			else
+			{
+				config.blockedPorts = m_configuration.blockedPorts();
+			}
+
 			if ( config.blockedPorts.isEmpty() )
 			{
 				config.blockedPorts = QStringLiteral( "80,443,8080,8443" );
 			}
-			config.allowedSubnets = message.argument( Argument::AllowedSubnets ).toString();
-			config.allowedHosts = message.argument( Argument::AllowedHosts ).toString();
-			config.blockDns = message.argument( Argument::BlockDns ).toBool();
+
+			if ( message.hasArgument( Argument::AllowedSubnets ) )
+			{
+				config.allowedSubnets = message.argument( Argument::AllowedSubnets ).toString();
+			}
+			else
+			{
+				config.allowedSubnets = m_configuration.allowedSubnets();
+			}
+
+			if ( message.hasArgument( Argument::AllowedHosts ) )
+			{
+				config.allowedHosts = message.argument( Argument::AllowedHosts ).toString();
+			}
+			else
+			{
+				config.allowedHosts = m_configuration.allowedHosts();
+			}
+
+			if ( message.hasArgument( Argument::BlockDns ) )
+			{
+				config.blockDns = message.argument( Argument::BlockDns ).toBool();
+			}
+			else
+			{
+				config.blockDns = m_configuration.blockDnsTraffic();
+			}
 
 			WindowsFirewallController::instance().blockInternet( config );
 			return true;
