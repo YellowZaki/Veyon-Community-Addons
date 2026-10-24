@@ -10,6 +10,7 @@
 #include <QDesktopServices>
 #include <QUrl>
 #include <QTime>
+#include <QCloseEvent>
 
 ScreenRecorderControlWidget::ScreenRecorderControlWidget( QWidget* parent ) :
 	QWidget( parent, Qt::Tool | Qt::WindowStaysOnTopHint ),
