@@ -14,7 +14,7 @@ class VideoWriter
 public:
 	virtual ~VideoWriter() = default;
 
-	virtual bool open( const QString& filePath, int width, int height, int fps, int bitrateKbps ) = 0;
+	virtual bool open( const QString& filePath, int width, int height, int fps, int quality ) = 0;
 	virtual bool writeFrame( const QImage& frame, qint64 timestampMs ) = 0;
 	virtual void close() = 0;
 	virtual bool isOpen() const = 0;

@@ -190,60 +190,55 @@
           <string>High Efficiency MP4 (H.265 / HEVC)</string>
          </property>
         </item>
-        <item>
-         <property name="text">
-          <string>Motion JPEG (AVI)</string>
-         </property>
-        </item>
        </widget>
       </item>
       <item row="1" column="0">
-       <widget class="QLabel" name="label_bitrate">
-        <property name="text">
-         <string>Bitrate:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="1">
-       <layout class="QHBoxLayout" name="bitrateLayout">
-        <item>
-         <widget class="QSpinBox" name="bitrate">
-          <property name="minimum">
-           <number>200</number>
-          </property>
-          <property name="maximum">
-           <number>50000</number>
-          </property>
-          <property name="singleStep">
-           <number>500</number>
-          </property>
-          <property name="value">
-           <number>2500</number>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QLabel" name="label_kbps">
-          <property name="text">
-           <string>kbps</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <spacer name="bitrateSpacer">
-          <property name="orientation">
-           <enum>Qt::Horizontal</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>40</width>
-            <height>20</height>
-           </size>
-          </property>
-         </spacer>
-        </item>
-       </layout>
-      </item>
+        <widget class="QLabel" name="label_quality">
+         <property name="text">
+          <string>Video quality (CRF):</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <layout class="QHBoxLayout" name="qualityLayout">
+         <item>
+          <widget class="QSpinBox" name="quality">
+           <property name="minimum">
+            <number>1</number>
+           </property>
+           <property name="maximum">
+            <number>100</number>
+           </property>
+           <property name="singleStep">
+            <number>5</number>
+           </property>
+           <property name="value">
+            <number>70</number>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_quality_suffix">
+           <property name="text">
+            <string>% (Recommended: 70)</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="qualitySpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
      </layout>
     </widget>
    </item>

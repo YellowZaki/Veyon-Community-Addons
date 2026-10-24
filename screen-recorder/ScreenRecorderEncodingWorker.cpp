@@ -6,7 +6,6 @@
 
 #include "ScreenRecorderEncodingWorker.h"
 #include "MediaFoundationVideoWriter.h"
-#include "AviVideoWriter.h"
 #include "Logger.h"
 
 #include <QPainter>
@@ -139,47 +138,32 @@ bool ScreenRecorderEncodingWorker::initializeWriter( const QImage& firstFrame )
 	const int width = firstFrame.width();
 	const int height = firstFrame.height();
 
-	if ( ( m_options.format == Format::StandardMp4 || m_options.format == Format::HevcMp4 ) &&
-		 MediaFoundationVideoWriter::isSupported() )
+	if ( MediaFoundationVideoWriter::isSupported() )
 	{
 		const auto codec = ( m_options.format == Format::HevcMp4 )
 			? MediaFoundationVideoWriter::Codec::H265
 			: MediaFoundationVideoWriter::Codec::H264;
 
 		auto mfWriter = new MediaFoundationVideoWriter( codec );
-		if ( mfWriter->open( m_actualFilePath, width, height, m_options.fps, m_options.bitrateKbps ) )
+		if ( mfWriter->open( m_actualFilePath, width, height, m_options.fps, m_options.quality ) )
 		{
 			m_writer.reset( mfWriter );
 			vDebug() << "Initialized MediaFoundationVideoWriter ("
 					 << ( m_options.format == Format::HevcMp4 ? "HEVC/H.265" : "H.264" )
-					 << ") for" << m_options.computerName << ":" << m_actualFilePath;
+					 << ") for" << m_options.computerName << ":" << m_actualFilePath
+					 << "quality:" << m_options.quality;
 			return true;
 		}
 
-		vWarning() << "MediaFoundationVideoWriter failed (" << mfWriter->errorString()
-				   << "), falling back to AviVideoWriter";
+		vCritical() << "MediaFoundationVideoWriter failed:" << mfWriter->errorString();
+		const QString err = mfWriter->errorString();
 		delete mfWriter;
-
-		// Fallback to AVI
-		if ( m_actualFilePath.endsWith( QStringLiteral( ".mp4" ), Qt::CaseInsensitive ) )
-		{
-			m_actualFilePath.chop( 4 );
-			m_actualFilePath += QStringLiteral( ".avi" );
-		}
+		Q_EMIT recordingError( err );
+		return false;
 	}
 
-	auto aviWriter = new AviVideoWriter();
-	if ( aviWriter->open( m_actualFilePath, width, height, m_options.fps, m_options.bitrateKbps ) )
-	{
-		m_writer.reset( aviWriter );
-		vDebug() << "Initialized AviVideoWriter (AVI) for" << m_options.computerName << ":" << m_actualFilePath;
-		return true;
-	}
-
-	vCritical() << "Failed to initialize video writer:" << aviWriter->errorString();
-	const QString err = aviWriter->errorString();
-	delete aviWriter;
-	Q_EMIT recordingError( err );
+	vCritical() << "Media Foundation is not supported on this platform";
+	Q_EMIT recordingError( QStringLiteral( "Media Foundation not supported" ) );
 	return false;
 }
 

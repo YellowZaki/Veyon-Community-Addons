@@ -24,8 +24,7 @@ public:
 	enum class Format
 	{
 		StandardMp4 = 0,
-		HevcMp4 = 1,
-		MotionJpegAvi = 2
+		HevcMp4 = 1
 	};
 	Q_ENUM( Format )
 
@@ -35,7 +34,7 @@ public:
 		QString computerName;
 		Format format{Format::StandardMp4};
 		int fps{15};
-		int bitrateKbps{2500};
+		int quality{70};
 		bool useFixedResolution{false};
 		int resolutionWidth{1920};
 		int resolutionHeight{1080};

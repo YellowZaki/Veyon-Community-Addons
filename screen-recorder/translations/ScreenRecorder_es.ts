@@ -16,8 +16,8 @@
         <translation>Haga clic en este botón para grabar las pantallas de todos los usuarios en archivos de video.</translation>
     </message>
     <message>
-        <source>Record screens of selected computers to video files (MP4/AVI)</source>
-        <translation>Grabar las pantallas de los equipos seleccionados en archivos de video (MP4/AVI)</translation>
+        <source>Record screens of selected computers to video files (MP4)</source>
+        <translation>Grabar las pantallas de los equipos seleccionados en archivos de video (MP4)</translation>
     </message>
     <message>
         <source>Screen recording</source>
@@ -141,12 +141,12 @@
         <translation>Motion JPEG (AVI)</translation>
     </message>
     <message>
-        <source>Bitrate:</source>
-        <translation>Tasa de bits (Bitrate):</translation>
+        <source>Video quality (CRF):</source>
+        <translation>Calidad de video (CRF):</translation>
     </message>
     <message>
-        <source>kbps</source>
-        <translation>kbps</translation>
+        <source>% (Recommended: 70)</source>
+        <translation>% (Recomendado: 70)</translation>
     </message>
     <message>
         <source>Other settings</source>

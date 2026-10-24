@@ -164,10 +164,7 @@ bool ScreenRecorderFeaturePlugin::startRecording( VeyonMasterInterface* master,
 
 	m_master = master;
 	const QString baseDir = ScreenRecorderUtil::resolvedOutputDirectory( m_configuration );
-	const auto fmt = static_cast<ScreenRecorderEncodingWorker::Format>( m_configuration.format() );
-	const QString extension = ( fmt == ScreenRecorderEncodingWorker::Format::MotionJpegAvi )
-		? QStringLiteral( ".avi" )
-		: QStringLiteral( ".mp4" );
+	const QString extension = QStringLiteral( ".mp4" );
 
 	vDebug() << "Starting screen recording for" << computerControlInterfaces.size()
 			 << "computer(s), output dir:" << baseDir;
@@ -201,7 +198,7 @@ bool ScreenRecorderFeaturePlugin::startRecording( VeyonMasterInterface* master,
 		}
 		opts.format = static_cast<ScreenRecorderEncodingWorker::Format>( m_configuration.format() );
 		opts.fps = fps;
-		opts.bitrateKbps = m_configuration.bitrate();
+		opts.quality = m_configuration.quality();
 		opts.useFixedResolution = m_configuration.useFixedResolution();
 		opts.resolutionWidth = m_configuration.resolutionWidth();
 		opts.resolutionHeight = m_configuration.resolutionHeight();

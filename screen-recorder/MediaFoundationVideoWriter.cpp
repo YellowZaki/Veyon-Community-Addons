@@ -67,6 +67,12 @@ static const GUID GUID_MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS =
 static const GUID GUID_MF_SINK_WRITER_DISABLE_THROTTLING =
 	{ 0x08b845d8, 0x2b74, 0x4afe, { 0x9d, 0x53, 0xbe, 0x16, 0xd2, 0xd5, 0xae, 0x4f } };
 
+static const GUID GUID_CODECAPI_AVEncCommonRateControlMode =
+	{ 0x1c0608e9, 0x399c, 0x4158, { 0xa4, 0x96, 0xd1, 0xf5, 0xb1, 0xa7, 0x74, 0x1d } };
+
+static const GUID GUID_CODECAPI_AVEncCommonQuality =
+	{ 0xfcbfcfdd, 0x03af, 0x477b, { 0xa7, 0xc1, 0x4b, 0x71, 0xfa, 0xfa, 0xd5, 0xbb } };
+
 // Dynamic loader for Media Foundation functions
 class MediaFoundationApi
 {
@@ -174,7 +180,7 @@ QString MediaFoundationVideoWriter::errorString() const
 	return m_errorString;
 }
 
-bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int height, int fps, int bitrateKbps )
+bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int height, int fps, int quality )
 {
 	close();
 
@@ -196,6 +202,7 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 	m_width = ( width + 1 ) & ~1;
 	m_height = ( height + 1 ) & ~1;
 	m_fps = fps;
+	m_quality = qBound( 1, quality, 100 );
 
 	HRESULT hr = CoInitializeEx( NULL, COINIT_MULTITHREADED );
 	m_comInitialized = SUCCEEDED( hr ) || hr == S_FALSE;
@@ -256,7 +263,10 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 
 	pMediaTypeOut->SetGUID( GUID_MF_MT_MAJOR_TYPE, GUID_MFMediaType_Video );
 	pMediaTypeOut->SetGUID( GUID_MF_MT_SUBTYPE, targetSubtype );
-	pMediaTypeOut->SetUINT32( GUID_MF_MT_AVG_BITRATE, bitrateKbps * 1000 );
+
+	// Nominal bitrate ceiling based on quality factor (bps)
+	const UINT32 nominalBitrate = static_cast<UINT32>( m_quality * 50000 );
+	pMediaTypeOut->SetUINT32( GUID_MF_MT_AVG_BITRATE, nominalBitrate );
 	pMediaTypeOut->SetUINT32( GUID_MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive );
 	setAttrSize( pMediaTypeOut, GUID_MF_MT_FRAME_SIZE, static_cast<UINT32>( m_width ), static_cast<UINT32>( m_height ) );
 	setAttrRatio( pMediaTypeOut, GUID_MF_MT_FRAME_RATE, static_cast<UINT32>( m_fps ), 1 );
@@ -297,7 +307,28 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 	setAttrRatio( pMediaTypeIn, GUID_MF_MT_PIXEL_ASPECT_RATIO, 1, 1 );
 	pMediaTypeIn->SetUINT32( GUID_MF_MT_DEFAULT_STRIDE, static_cast<UINT32>( m_width * 4 ) );
 
-	hr = m_sinkWriter->SetInputMediaType( m_streamIndex, pMediaTypeIn, NULL );
+	// Configure Quality-based VBR (CRF equivalent in Media Foundation)
+	IMFAttributes* pEncAttrs = nullptr;
+	hr = mf.fnCreateAttributes( &pEncAttrs, 2 );
+	if ( SUCCEEDED( hr ) && pEncAttrs )
+	{
+		// 3 = eAVEncCommonRateControlMode_Quality
+		pEncAttrs->SetUINT32( GUID_CODECAPI_AVEncCommonRateControlMode, 3 );
+		pEncAttrs->SetUINT32( GUID_CODECAPI_AVEncCommonQuality, static_cast<UINT32>( m_quality ) );
+	}
+
+	hr = m_sinkWriter->SetInputMediaType( m_streamIndex, pMediaTypeIn, pEncAttrs );
+	if ( FAILED( hr ) && pEncAttrs )
+	{
+		// Graceful fallback if specific GPU driver MFT rejects the rate control property
+		hr = m_sinkWriter->SetInputMediaType( m_streamIndex, pMediaTypeIn, NULL );
+	}
+	if ( pEncAttrs )
+	{
+		pEncAttrs->Release();
+		pEncAttrs = nullptr;
+	}
+
 	pMediaTypeIn->Release();
 	if ( FAILED( hr ) )
 	{

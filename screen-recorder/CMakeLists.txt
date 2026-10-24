@@ -24,8 +24,6 @@ set(SOURCES
 	VideoWriter.h
 	MediaFoundationVideoWriter.cpp
 	MediaFoundationVideoWriter.h
-	AviVideoWriter.cpp
-	AviVideoWriter.h
 	screenrecorder.qrc
 )
 

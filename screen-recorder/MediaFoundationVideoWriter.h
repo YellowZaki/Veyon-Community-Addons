@@ -22,7 +22,7 @@ public:
 	explicit MediaFoundationVideoWriter( Codec codec = Codec::H264 );
 	~MediaFoundationVideoWriter() override;
 
-	bool open( const QString& filePath, int width, int height, int fps, int bitrateKbps ) override;
+	bool open( const QString& filePath, int width, int height, int fps, int quality ) override;
 	bool writeFrame( const QImage& frame, qint64 timestampMs ) override;
 	void close() override;
 	bool isOpen() const override;
@@ -40,5 +40,6 @@ private:
 	int m_width{0};
 	int m_height{0};
 	int m_fps{15};
+	int m_quality{70};
 	QString m_errorString;
 };

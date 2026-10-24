@@ -2,7 +2,7 @@
 
 Recreación de código abierto y completamente libre del addon comercial **Screen Recorder** para **Veyon (versión 4.11.4)** en sistemas Windows 10 y Windows 11.
 
-Permite grabar en archivos de video (MP4 con H.264 o AVI con Motion-JPEG) las pantallas de los alumnos seleccionados o de todo el aula de forma simultánea, sin dependencias externas pesadas y con procesamiento en segundo plano multihilo.
+Permite grabar en archivos de video MP4 (con H.264 o H.265 / HEVC) las pantallas de los alumnos seleccionados o de todo el aula de forma simultánea, sin dependencias externas pesadas, con tasa variable adaptativa (CRF) y con procesamiento en segundo plano multihilo.
 
 ---
 
@@ -13,9 +13,11 @@ Permite grabar en archivos de video (MP4 con H.264 o AVI con Motion-JPEG) las pa
    - Captura el framebuffer directamente a través del motor de Veyon (`ComputerControlInterface`).
    - Sincronización automática de FPS y resolución (tasa fija o nativa).
 
-2. **Doble motor de codificación de video (Cero dependencias externas):**
-   - **Estándar MP4 (H.264):** Utiliza **Windows Media Foundation** (`IMFSinkWriter`), aprovechando aceleración por hardware (NVENC/Intel QSV/AMD AMF) o el codificador de software integrado en Windows. Produce videos ligeros, de alta calidad y reproducibles en cualquier dispositivo.
-   - **Motion-JPEG (AVI):** Motor propio en C++ puro con compresión JPEG integrada de Qt. Formato universal de máxima compatibilidad, que actúa además como respaldo automático si Media Foundation no está disponible.
+2. **Codificación de video nativa MP4 (Cero dependencias externas):**
+   - **Estándar MP4 (H.264):** Máxima compatibilidad con cualquier dispositivo y reproductor.
+   - **Alta Eficiencia MP4 (H.265 / HEVC):** Máxima compresión, reduciendo el tamaño de archivo hasta un 50% con la misma nitidez.
+   - Utiliza **Windows Media Foundation** (`IMFSinkWriter`), aprovechando aceleración por hardware de la GPU (NVENC/Intel QSV/AMD AMF) o el codificador de software integrado en Windows.
+   - **Tasa adaptativa inteligente (CRF / Quality-based VBR):** El bitrate se ajusta de forma dinámica según el movimiento en pantalla. Cuando la pantalla está estática el uso de bits cae casi a cero, logrando archivos muy ligeros.
 
 3. **Panel de control en tiempo real en Veyon Master (`ScreenRecorderControlWidget`):**
    - Ventana flotante con cronómetro digital en tiempo real (`00:00:00`).
@@ -26,7 +28,7 @@ Permite grabar en archivos de video (MP4 con H.264 o AVI con Motion-JPEG) las pa
 
 4. **Integración completa en Veyon Configurator:**
    - **Ajustes de salida:** Directorio de destino configurable (por defecto en *Videos/Veyon Recordings*), subdirectorios por nombre de equipo, resolución fija o adaptativa y tasa de cuadros por segundo (FPS).
-   - **Ajustes de codificación:** Selector de formato (MP4 H.264 / AVI MJPEG) y tasa de bits (Bitrate en kbps).
+   - **Ajustes de codificación:** Selector de formato (MP4 H.264 / MP4 H.265 HEVC) y calidad de video adaptativa (CRF 1-100%, recomendado 70%).
    - **Notificaciones al alumno:** Opción para mostrar un aviso informativo en el escritorio del alumno cuando comience o finalice la grabación.
 
 5. **Arquitectura multihilo no bloqueante:**
@@ -52,10 +54,8 @@ screen-recorder/
 ├── ScreenRecorderEncodingWorker.h               # Worker en segundo plano con cola de frames segura
 ├── ScreenRecorderEncodingWorker.cpp
 ├── VideoWriter.h                                # Interfaz abstracta para codificadores de video
-├── MediaFoundationVideoWriter.h                 # Codificador H.264 MP4 vía Windows Media Foundation
+├── MediaFoundationVideoWriter.h                 # Codificador H.264 / H.265 MP4 vía Windows Media Foundation
 ├── MediaFoundationVideoWriter.cpp
-├── AviVideoWriter.h                             # Codificador Motion-JPEG AVI autónomo
-├── AviVideoWriter.cpp
 ├── screenrecorder.qrc                           # Recursos e iconos embebidos
 ├── resources/                                   # Iconos vectoriales renderizados en PNG
 │   ├── media-record.png
