@@ -209,13 +209,13 @@ bool ScreenRecorderFeaturePlugin::startRecording( VeyonMasterInterface* master,
 		session->worker = new ScreenRecorderEncodingWorker( opts, this );
 
 		// Hook up capture timer to sample frames at regular intervals
-		session->captureTimer = new QTimer( session.data() );
+		session->captureTimer = new QTimer( this );
 		session->captureTimer->setInterval( intervalMs );
 
 		QWeakPointer<ComputerControlInterface> weakInterface = controlInterface.toWeakRef();
 		auto rawWorker = session->worker;
 
-		connect( session->captureTimer, &QTimer::timeout, session.data(), [weakInterface, rawWorker]() {
+		connect( session->captureTimer, &QTimer::timeout, this, [weakInterface, rawWorker]() {
 			auto iface = weakInterface.toStrongRef();
 			if ( iface && iface->hasValidFramebuffer() )
 			{
@@ -291,6 +291,7 @@ bool ScreenRecorderFeaturePlugin::stopRecording()
 		if ( session->captureTimer )
 		{
 			session->captureTimer->stop();
+			delete session->captureTimer;
 			session->captureTimer = nullptr;
 		}
 
