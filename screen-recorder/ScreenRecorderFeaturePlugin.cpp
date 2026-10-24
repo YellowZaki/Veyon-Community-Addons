@@ -6,7 +6,6 @@
 
 #include "ScreenRecorderFeaturePlugin.h"
 #include "ScreenRecorderConfigurationPage.h"
-#include "ScreenRecorderControlWidget.h"
 #include "ScreenRecorderEncodingWorker.h"
 #include "ComputerControlInterface.h"
 #include "FeatureWorkerManager.h"
@@ -16,11 +15,12 @@
 #include "VeyonServerInterface.h"
 #include "VeyonWorkerInterface.h"
 
+#include <QAbstractItemView>
 #include <QDateTime>
 #include <QDir>
 #include <QMessageBox>
 #include <QRegularExpression>
-#include <QTimer>
+#include <QToolButton>
 
 static QString sanitizeFilename( const QString& name )
 {
@@ -44,15 +44,14 @@ ScreenRecorderFeaturePlugin::ScreenRecorderFeaturePlugin( QObject* parent ) :
 		QStringLiteral( ":/screenrecorder/resources/media-record.png" ) ),
 	m_features( { m_screenRecorderFeature } )
 {
+	m_buttonUpdateTimer = new QTimer( this );
+	m_buttonUpdateTimer->setInterval( 1000 );
+	connect( m_buttonUpdateTimer, &QTimer::timeout, this, &ScreenRecorderFeaturePlugin::updateToolbarButton );
 }
 
 ScreenRecorderFeaturePlugin::~ScreenRecorderFeaturePlugin()
 {
 	stopRecording();
-	if ( m_controlWidget )
-	{
-		delete m_controlWidget.data();
-	}
 }
 
 bool ScreenRecorderFeaturePlugin::startFeature( VeyonMasterInterface& master, const Feature& feature,
@@ -88,14 +87,13 @@ bool ScreenRecorderFeaturePlugin::stopFeature( VeyonMasterInterface& master, con
 											  const ComputerControlInterfaceList& computerControlInterfaces )
 {
 	Q_UNUSED( master )
-	Q_UNUSED( computerControlInterfaces )
 
 	if ( feature.uid() != m_screenRecorderFeature.uid() )
 	{
 		return false;
 	}
 
-	return stopRecording();
+	return stopRecording( computerControlInterfaces );
 }
 
 bool ScreenRecorderFeaturePlugin::controlFeature( Feature::Uid featureUid, Operation operation,
@@ -115,7 +113,7 @@ bool ScreenRecorderFeaturePlugin::controlFeature( Feature::Uid featureUid, Opera
 	}
 	else if ( operation == Operation::Stop )
 	{
-		return stopRecording();
+		return stopRecording( computerControlInterfaces );
 	}
 
 	return false;
@@ -156,28 +154,29 @@ QString ScreenRecorderFeaturePlugin::generateOutputFilePath( const QString& base
 bool ScreenRecorderFeaturePlugin::startRecording( VeyonMasterInterface* master,
 												 const ComputerControlInterfaceList& computerControlInterfaces )
 {
-	if ( m_isRecording )
+	if ( master )
 	{
-		vWarning() << "Screen recording is already active";
-		return false;
+		m_master = master;
 	}
 
-	m_master = master;
 	const QString baseDir = ScreenRecorderUtil::resolvedOutputDirectory( m_configuration );
 	const QString extension = QStringLiteral( ".mp4" );
 
-	vDebug() << "Starting screen recording for" << computerControlInterfaces.size()
-			 << "computer(s), output dir:" << baseDir;
-
-	m_activeSessions.clear();
-
 	const int fps = qBound( 1, m_configuration.framesPerSecond(), 60 );
 	const int intervalMs = 1000 / fps;
+
+	ComputerControlInterfaceList newlyStartedInterfaces;
 
 	for ( const auto& controlInterface : computerControlInterfaces )
 	{
 		if ( !controlInterface )
 		{
+			continue;
+		}
+
+		if ( m_activeSessions.contains( controlInterface.data() ) )
+		{
+			// Already actively recording this computer
 			continue;
 		}
 
@@ -228,10 +227,19 @@ bool ScreenRecorderFeaturePlugin::startRecording( VeyonMasterInterface* master,
 		// Switch student connection to Live update mode for smooth recording
 		controlInterface->setUpdateMode( ComputerControlInterface::UpdateMode::Live );
 
+		// Add screen recorder feature to activeFeatures so Veyon's item delegate displays the recording badge
+		auto features = controlInterface->activeFeatures();
+		if ( !features.contains( m_screenRecorderFeature.uid() ) )
+		{
+			features.append( m_screenRecorderFeature.uid() );
+			controlInterface->setActiveFeatures( features );
+		}
+
 		session->worker->start();
 		session->captureTimer->start();
 
 		m_activeSessions.insert( controlInterface.data(), session );
+		newlyStartedInterfaces.append( controlInterface );
 	}
 
 	if ( m_activeSessions.isEmpty() )
@@ -240,52 +248,71 @@ bool ScreenRecorderFeaturePlugin::startRecording( VeyonMasterInterface* master,
 		return false;
 	}
 
-	m_isRecording = true;
+	if ( !m_isRecording )
+	{
+		m_isRecording = true;
+		m_recordingElapsedTimer.start();
+		if ( m_buttonUpdateTimer )
+		{
+			m_buttonUpdateTimer->start();
+		}
+	}
 
-	if ( m_configuration.notifyUsers() )
+	if ( m_configuration.notifyUsers() && !newlyStartedInterfaces.isEmpty() )
 	{
 		FeatureMessage msg{ m_screenRecorderFeature.uid(), FeatureCommand::NotifyStartRecording };
-		sendFeatureMessage( msg, computerControlInterfaces );
+		sendFeatureMessage( msg, newlyStartedInterfaces );
 	}
 
-	// Show control widget in Master
-	if ( master && master->mainWindow() )
-	{
-		if ( !m_controlWidget )
-		{
-			m_controlWidget = new ScreenRecorderControlWidget( master->mainWindow() );
-			connect( m_controlWidget.data(), &ScreenRecorderControlWidget::stopRecordingRequested,
-					 this, &ScreenRecorderFeaturePlugin::onStopRecordingRequested );
-		}
-		m_controlWidget->start( m_activeSessions.size(), baseDir );
-	}
+	updateToolbarButton();
+	updateComputerOverlays();
+
+	vDebug() << "Screen recording active for" << m_activeSessions.size() << "computer(s), output dir:" << baseDir;
 
 	return true;
 }
 
-bool ScreenRecorderFeaturePlugin::stopRecording()
+bool ScreenRecorderFeaturePlugin::stopRecording( const ComputerControlInterfaceList& computerControlInterfaces )
 {
-	if ( !m_isRecording )
+	if ( !m_isRecording && m_activeSessions.isEmpty() )
 	{
 		return false;
 	}
 
-	vDebug() << "Stopping screen recording on" << m_activeSessions.size() << "sessions";
-
-	if ( m_configuration.notifyUsers() )
+	QList<ComputerControlInterface*> toStop;
+	if ( computerControlInterfaces.isEmpty() )
 	{
-		ComputerControlInterfaceList interfaces;
-		for ( const auto& session : m_activeSessions )
+		toStop = m_activeSessions.keys();
+	}
+	else
+	{
+		for ( const auto& controlInterface : computerControlInterfaces )
 		{
-			interfaces.append( session->controlInterface );
+			if ( controlInterface && m_activeSessions.contains( controlInterface.data() ) )
+			{
+				toStop.append( controlInterface.data() );
+			}
 		}
-		FeatureMessage msg{ m_screenRecorderFeature.uid(), FeatureCommand::NotifyStopRecording };
-		sendFeatureMessage( msg, interfaces );
+		// If targets were provided but none matched (e.g. toolbar click passed all filtered computers),
+		// stop all active sessions
+		if ( toStop.isEmpty() )
+		{
+			toStop = m_activeSessions.keys();
+		}
 	}
 
-	for ( auto it = m_activeSessions.begin(); it != m_activeSessions.end(); ++it )
+	vDebug() << "Stopping screen recording on" << toStop.size() << "session(s), remaining:" << ( m_activeSessions.size() - toStop.size() );
+
+	ComputerControlInterfaceList notifiedInterfaces;
+
+	for ( auto* ifacePtr : toStop )
 	{
-		auto session = it.value();
+		auto session = m_activeSessions.take( ifacePtr );
+		if ( !session )
+		{
+			continue;
+		}
+
 		if ( session->captureTimer )
 		{
 			session->captureTimer->stop();
@@ -296,6 +323,13 @@ bool ScreenRecorderFeaturePlugin::stopRecording()
 		if ( session->controlInterface )
 		{
 			session->controlInterface->setUpdateMode( session->originalUpdateMode );
+
+			// Remove active feature badge so the red dot disappears from the thumbnail
+			auto features = session->controlInterface->activeFeatures();
+			features.removeAll( m_screenRecorderFeature.uid() );
+			session->controlInterface->setActiveFeatures( features );
+
+			notifiedInterfaces.append( session->controlInterface );
 		}
 
 		if ( session->worker )
@@ -306,20 +340,133 @@ bool ScreenRecorderFeaturePlugin::stopRecording()
 		}
 	}
 
-	m_activeSessions.clear();
-	m_isRecording = false;
-
-	if ( m_controlWidget )
+	if ( m_configuration.notifyUsers() && !notifiedInterfaces.isEmpty() )
 	{
-		m_controlWidget->stop();
+		FeatureMessage msg{ m_screenRecorderFeature.uid(), FeatureCommand::NotifyStopRecording };
+		sendFeatureMessage( msg, notifiedInterfaces );
+	}
+
+	updateComputerOverlays();
+
+	if ( m_activeSessions.isEmpty() )
+	{
+		m_isRecording = false;
+		if ( m_buttonUpdateTimer )
+		{
+			m_buttonUpdateTimer->stop();
+		}
+		m_recordingElapsedTimer.invalidate();
+		resetToolbarButton();
+
+		// If master is currently in ScreenRecorder mode and has no sessions left, switch back to monitoring mode
+		if ( m_master && m_master->mainWindow() )
+		{
+			auto monitoringBtn = m_master->mainWindow()->findChild<QToolButton*>( QStringLiteral( "MonitoringMode" ) );
+			if ( monitoringBtn )
+			{
+				monitoringBtn->click();
+			}
+		}
+	}
+	else
+	{
+		updateToolbarButton();
 	}
 
 	return true;
 }
 
-void ScreenRecorderFeaturePlugin::onStopRecordingRequested()
+void ScreenRecorderFeaturePlugin::updateToolbarButton()
 {
-	stopRecording();
+	if ( !m_master || !m_master->mainWindow() )
+	{
+		return;
+	}
+
+	auto button = m_master->mainWindow()->findChild<QToolButton*>( QStringLiteral( "ScreenRecorder" ) );
+	if ( !button )
+	{
+		return;
+	}
+
+	const qint64 elapsedSec = m_recordingElapsedTimer.isValid() ? ( m_recordingElapsedTimer.elapsed() / 1000 ) : 0;
+	const int hours = static_cast<int>( elapsedSec / 3600 );
+	const int minutes = static_cast<int>( ( elapsedSec % 3600 ) / 60 );
+	const int seconds = static_cast<int>( elapsedSec % 60 );
+
+	QString timeStr;
+	if ( hours > 0 )
+	{
+		timeStr = QStringLiteral( "%1:%2:%3" )
+					  .arg( hours, 2, 10, QLatin1Char( '0' ) )
+					  .arg( minutes, 2, 10, QLatin1Char( '0' ) )
+					  .arg( seconds, 2, 10, QLatin1Char( '0' ) );
+	}
+	else
+	{
+		timeStr = QStringLiteral( "%1:%2" )
+					  .arg( minutes, 2, 10, QLatin1Char( '0' ) )
+					  .arg( seconds, 2, 10, QLatin1Char( '0' ) );
+	}
+
+	button->setIcon( QIcon( QStringLiteral( ":/screenrecorder/resources/media-record-active.png" ) ) );
+	button->setText( QStringLiteral( "%1\n%2" ).arg( tr( "Stop recording" ), timeStr ) );
+
+	if ( !button->isChecked() )
+	{
+		button->setChecked( true );
+	}
+
+	// Ensure all active recording sessions maintain their activeFeatures badge
+	for ( auto it = m_activeSessions.constBegin(); it != m_activeSessions.constEnd(); ++it )
+	{
+		const auto& session = it.value();
+		if ( session && session->controlInterface )
+		{
+			auto features = session->controlInterface->activeFeatures();
+			if ( !features.contains( m_screenRecorderFeature.uid() ) )
+			{
+				features.append( m_screenRecorderFeature.uid() );
+				session->controlInterface->setActiveFeatures( features );
+			}
+		}
+	}
+}
+
+void ScreenRecorderFeaturePlugin::resetToolbarButton()
+{
+	if ( !m_master || !m_master->mainWindow() )
+	{
+		return;
+	}
+
+	auto button = m_master->mainWindow()->findChild<QToolButton*>( QStringLiteral( "ScreenRecorder" ) );
+	if ( button )
+	{
+		button->setIcon( QIcon( QStringLiteral( ":/screenrecorder/resources/media-record.png" ) ) );
+		button->setText( tr( "Record" ) );
+		if ( button->isChecked() )
+		{
+			button->setChecked( false );
+		}
+	}
+}
+
+void ScreenRecorderFeaturePlugin::updateComputerOverlays()
+{
+	if ( !m_master || !m_master->mainWindow() )
+	{
+		return;
+	}
+
+	const auto views = m_master->mainWindow()->findChildren<QAbstractItemView*>();
+	for ( auto view : views )
+	{
+		if ( view && view->viewport() )
+		{
+			view->viewport()->update();
+		}
+	}
 }
 
 bool ScreenRecorderFeaturePlugin::handleFeatureMessage( VeyonServerInterface& server,

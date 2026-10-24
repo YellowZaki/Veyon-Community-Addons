@@ -19,12 +19,10 @@ Permite grabar en archivos de video MP4 (con H.264 o H.265 / HEVC) las pantallas
    - Utiliza **Windows Media Foundation** (`IMFSinkWriter`), aprovechando aceleración por hardware de la GPU (NVENC/Intel QSV/AMD AMF) o el codificador de software integrado en Windows.
    - **Tasa adaptativa inteligente (CRF / Quality-based VBR):** El bitrate se ajusta de forma dinámica según el movimiento en pantalla. Cuando la pantalla está estática el uso de bits cae casi a cero, logrando archivos muy ligeros.
 
-3. **Panel de control en tiempo real en Veyon Master (`ScreenRecorderControlWidget`):**
-   - Ventana flotante con cronómetro digital en tiempo real (`00:00:00`).
-   - Indicador visual animado de grabación activa.
-   - Contador de pantallas grabándose simultáneamente.
-   - Botón directo para **Detener grabación**.
-   - Botón directo para **Abrir carpeta con grabaciones** en el Explorador de Windows.
+3. **Integración 100% nativa en Veyon Master:**
+   - **Control directo desde la barra superior:** Botón *Grabar* que conmuta dinámicamente a *Detener grabación* con cronómetro digital integrado (`00:00:00`) en tiempo real. Sin ventanas flotantes molestas.
+   - **Feedback visual en cuadrícula de aula (Punto rojo 🔴):** Cada alumno que se esté grabando muestra automáticamente una insignia con el icono de grabación en su miniatura en Veyon Master.
+   - **Grabación dinámica con clic derecho en caliente:** Permite iniciar o detener la grabación de alumnos individuales haciendo clic derecho sobre su pantalla en cualquier momento, sin reiniciar la sesión ni interrumpir el cronómetro.
 
 4. **Integración completa en Veyon Configurator:**
    - **Ajustes de salida:** Directorio de destino configurable (por defecto en *Videos/Veyon Recordings*), subdirectorios por nombre de equipo, resolución fija o adaptativa y tasa de cuadros por segundo (FPS).
@@ -46,9 +44,6 @@ screen-recorder/
 ├── ScreenRecorderConfigurationPage.h            # Interfaz de configuración en Veyon Configurator
 ├── ScreenRecorderConfigurationPage.cpp
 ├── ScreenRecorderConfigurationPage.ui
-├── ScreenRecorderControlWidget.h                # Panel de control flotante en Veyon Master
-├── ScreenRecorderControlWidget.cpp
-├── ScreenRecorderControlWidget.ui
 ├── ScreenRecorderFeaturePlugin.h                # Punto de entrada del plugin (FeatureProviderInterface)
 ├── ScreenRecorderFeaturePlugin.cpp
 ├── ScreenRecorderEncodingWorker.h               # Worker en segundo plano con cola de frames segura

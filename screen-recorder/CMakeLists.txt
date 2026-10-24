@@ -16,9 +16,6 @@ set(SOURCES
 	ScreenRecorderConfigurationPage.cpp
 	ScreenRecorderConfigurationPage.h
 	ScreenRecorderConfigurationPage.ui
-	ScreenRecorderControlWidget.cpp
-	ScreenRecorderControlWidget.h
-	ScreenRecorderControlWidget.ui
 	ScreenRecorderEncodingWorker.cpp
 	ScreenRecorderEncodingWorker.h
 	VideoWriter.h

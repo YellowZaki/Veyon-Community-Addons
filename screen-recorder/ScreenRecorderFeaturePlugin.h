@@ -6,12 +6,12 @@
 
 #pragma once
 
-#include <QPointer>
+#include <QElapsedTimer>
+#include <QTimer>
 #include "ConfigurationPagePluginInterface.h"
 #include "FeatureProviderInterface.h"
 #include "ScreenRecorderConfiguration.h"
 
-class ScreenRecorderControlWidget;
 class ScreenRecorderEncodingWorker;
 
 class ScreenRecorderFeaturePlugin : public QObject,
@@ -51,7 +51,7 @@ public:
 
 	QString description() const override
 	{
-		return tr( "Record screens of selected computers to video files (MP4/AVI)" );
+		return tr( "Record screens of selected computers to video files (MP4)" );
 	}
 
 	QString vendor() const override
@@ -89,7 +89,7 @@ public:
 	ConfigurationPage* createConfigurationPage() override;
 
 private Q_SLOTS:
-	void onStopRecordingRequested();
+	void updateToolbarButton();
 
 private:
 	struct RecordingSession
@@ -102,7 +102,10 @@ private:
 
 	bool startRecording( VeyonMasterInterface* master,
 						 const ComputerControlInterfaceList& computerControlInterfaces );
-	bool stopRecording();
+	bool stopRecording( const ComputerControlInterfaceList& computerControlInterfaces = {} );
+
+	void resetToolbarButton();
+	void updateComputerOverlays();
 
 	QString generateOutputFilePath( const QString& baseDir,
 								   const ComputerControlInterface::Pointer& controlInterface,
@@ -113,7 +116,8 @@ private:
 	const FeatureList m_features;
 
 	bool m_isRecording{false};
-	QPointer<ScreenRecorderControlWidget> m_controlWidget;
+	QElapsedTimer m_recordingElapsedTimer;
+	QTimer* m_buttonUpdateTimer{nullptr};
 	VeyonMasterInterface* m_master{nullptr};
 	QMap<ComputerControlInterface*, QSharedPointer<RecordingSession>> m_activeSessions;
 };
