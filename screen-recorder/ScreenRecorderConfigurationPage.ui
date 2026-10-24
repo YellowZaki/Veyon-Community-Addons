@@ -187,6 +187,11 @@
         </item>
         <item>
          <property name="text">
+          <string>High Efficiency MP4 (H.265 / HEVC)</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
           <string>Motion JPEG (AVI)</string>
          </property>
         </item>

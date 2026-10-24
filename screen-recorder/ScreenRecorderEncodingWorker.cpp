@@ -139,13 +139,20 @@ bool ScreenRecorderEncodingWorker::initializeWriter( const QImage& firstFrame )
 	const int width = firstFrame.width();
 	const int height = firstFrame.height();
 
-	if ( m_options.format == Format::StandardMp4 && MediaFoundationVideoWriter::isSupported() )
+	if ( ( m_options.format == Format::StandardMp4 || m_options.format == Format::HevcMp4 ) &&
+		 MediaFoundationVideoWriter::isSupported() )
 	{
-		auto mfWriter = new MediaFoundationVideoWriter();
+		const auto codec = ( m_options.format == Format::HevcMp4 )
+			? MediaFoundationVideoWriter::Codec::H265
+			: MediaFoundationVideoWriter::Codec::H264;
+
+		auto mfWriter = new MediaFoundationVideoWriter( codec );
 		if ( mfWriter->open( m_actualFilePath, width, height, m_options.fps, m_options.bitrateKbps ) )
 		{
 			m_writer.reset( mfWriter );
-			vDebug() << "Initialized MediaFoundationVideoWriter (MP4) for" << m_options.computerName << ":" << m_actualFilePath;
+			vDebug() << "Initialized MediaFoundationVideoWriter ("
+					 << ( m_options.format == Format::HevcMp4 ? "HEVC/H.265" : "H.264" )
+					 << ") for" << m_options.computerName << ":" << m_actualFilePath;
 			return true;
 		}
 

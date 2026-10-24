@@ -8,6 +8,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QFile>
 
 #ifdef Q_OS_WIN
 
@@ -21,18 +22,50 @@
 #include <mferror.h>
 
 // Static GUID definitions to avoid linking external mfuuid.lib/libmfuuid.a
-static const GUID GUID_MF_MT_MAJOR_TYPE = { 0x48eba18e, 0xf8c9, 0x4687, { 0xbf, 0x11, 0x0a, 0x74, 0xc9, 0xe9, 0x6d, 0x4b } };
-static const GUID GUID_MF_MT_SUBTYPE = { 0xf7eac761, 0xb352, 0x4e50, { 0xbf, 0x75, 0x16, 0x72, 0x04, 0xe6, 0x0b, 0x70 } };
-static const GUID GUID_MFMediaType_Video = { 0x73646976, 0x0000, 0x0010, { 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71 } };
-static const GUID GUID_MFVideoFormat_H264 = { 0x34363248, 0x0000, 0x0010, { 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71 } };
-static const GUID GUID_MFVideoFormat_RGB32 = { 0x00000016, 0x0000, 0x0010, { 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71 } };
-static const GUID GUID_MF_MT_AVG_BITRATE = { 0x20360262, 0x07f0, 0x4fa6, { 0x9e, 0x22, 0x13, 0xe7, 0xec, 0x92, 0x3e, 0x08 } };
-static const GUID GUID_MF_MT_FRAME_SIZE = { 0x1652c33d, 0xd6b2, 0x4012, { 0xb8, 0x34, 0x72, 0x03, 0x08, 0x49, 0xa3, 0x7d } };
-static const GUID GUID_MF_MT_FRAME_RATE = { 0xc450743c, 0x7953, 0x4e18, { 0xb2, 0x9e, 0x26, 0xe4, 0x6e, 0xcd, 0x13, 0x71 } };
-static const GUID GUID_MF_MT_PIXEL_ASPECT_RATIO = { 0xc63764b2, 0xd808, 0x4ae8, { 0x84, 0xa0, 0xc1, 0x8a, 0x16, 0x24, 0x4c, 0x4c } };
-static const GUID GUID_MF_MT_INTERLACE_MODE = { 0xe2724447, 0xda04, 0x4223, { 0x85, 0x6f, 0x00, 0x02, 0xa0, 0x8e, 0xac, 0xa6 } };
-static const GUID GUID_MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS = { 0xa634a91c, 0x822b, 0x41b9, { 0xa4, 0x94, 0x4d, 0xe4, 0x64, 0x36, 0x12, 0xb0 } };
-static const GUID GUID_MF_SINK_WRITER_DISABLE_THROTTLING = { 0x08b845d8, 0x2b74, 0x4af2, { 0xbf, 0x66, 0x03, 0x22, 0x5a, 0x74, 0xb4, 0x4f } };
+static const GUID GUID_MF_MT_MAJOR_TYPE =
+	{ 0x48eba18e, 0xf8c9, 0x4687, { 0xbf, 0x11, 0x0a, 0x74, 0xc9, 0xf9, 0x6a, 0x8f } };
+
+static const GUID GUID_MF_MT_SUBTYPE =
+	{ 0xf7e34c9a, 0x42e8, 0x4714, { 0xb7, 0x4b, 0xcb, 0x29, 0xd7, 0x2c, 0x35, 0xe5 } };
+
+static const GUID GUID_MFMediaType_Video =
+	{ 0x73646976, 0x0000, 0x0010, { 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71 } };
+
+static const GUID GUID_MFVideoFormat_H264 =
+	{ 0x34363248, 0x0000, 0x0010, { 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71 } };
+
+static const GUID GUID_MFVideoFormat_HEVC =
+	{ 0x43564548, 0x0000, 0x0010, { 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71 } };
+
+static const GUID GUID_MFVideoFormat_RGB32 =
+	{ 0x00000016, 0x0000, 0x0010, { 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71 } };
+
+static const GUID GUID_MF_MT_AVG_BITRATE =
+	{ 0x20332624, 0xfb0d, 0x4d9e, { 0xbd, 0x0d, 0xcb, 0xf6, 0x78, 0x6c, 0x10, 0x2e } };
+
+static const GUID GUID_MF_MT_FRAME_SIZE =
+	{ 0x1652c33d, 0xd6b2, 0x4012, { 0xb8, 0x34, 0x72, 0x03, 0x08, 0x49, 0xa3, 0x7d } };
+
+static const GUID GUID_MF_MT_FRAME_RATE =
+	{ 0xc459a2e8, 0x3d2c, 0x4e44, { 0xb1, 0x32, 0xfe, 0xe5, 0x15, 0x6c, 0x7b, 0xb0 } };
+
+static const GUID GUID_MF_MT_PIXEL_ASPECT_RATIO =
+	{ 0xc6376a1e, 0x8d0a, 0x4027, { 0xbe, 0x45, 0x6d, 0x9a, 0x0a, 0xd3, 0x9b, 0xb6 } };
+
+static const GUID GUID_MF_MT_INTERLACE_MODE =
+	{ 0xe2724bb8, 0xe676, 0x4806, { 0xb4, 0xb2, 0xa8, 0xd6, 0xef, 0x54, 0xd2, 0xf6 } };
+
+static const GUID GUID_MF_MT_DEFAULT_STRIDE =
+	{ 0x644b4e48, 0x1e02, 0x4516, { 0xb0, 0xeb, 0xc0, 0x1c, 0xa9, 0xd4, 0x9a, 0xc6 } };
+
+static const GUID GUID_MF_MT_MPEG2_PROFILE =
+	{ 0xad76a80b, 0x2d5c, 0x4e0b, { 0xb3, 0x75, 0x64, 0xe5, 0x20, 0x13, 0x70, 0x36 } };
+
+static const GUID GUID_MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS =
+	{ 0xa634a91c, 0x822b, 0x41b9, { 0xa4, 0x94, 0x4d, 0xe4, 0x64, 0x36, 0x12, 0xb0 } };
+
+static const GUID GUID_MF_SINK_WRITER_DISABLE_THROTTLING =
+	{ 0x08b845d8, 0x2b74, 0x4afe, { 0x9d, 0x53, 0xbe, 0x16, 0xd2, 0xd5, 0xae, 0x4f } };
 
 // Dynamic loader for Media Foundation functions
 class MediaFoundationApi
@@ -112,7 +145,8 @@ static inline HRESULT setAttrRatio( IMFMediaType* pType, const GUID& guid, UINT3
 
 #endif // Q_OS_WIN
 
-MediaFoundationVideoWriter::MediaFoundationVideoWriter()
+MediaFoundationVideoWriter::MediaFoundationVideoWriter( Codec codec ) :
+	m_codec( codec )
 {
 }
 
@@ -158,20 +192,22 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 		return false;
 	}
 
-	// Dimensions must be even for H.264
+	// Dimensions must be even for H.264 / HEVC
 	m_width = ( width + 1 ) & ~1;
 	m_height = ( height + 1 ) & ~1;
 	m_fps = fps;
 
-	CoInitializeEx( NULL, COINIT_MULTITHREADED );
+	HRESULT hr = CoInitializeEx( NULL, COINIT_MULTITHREADED );
+	m_comInitialized = SUCCEEDED( hr ) || hr == S_FALSE;
 
-	HRESULT hr = mf.fnStartup( MF_VERSION, MFSTARTUP_NOSOCKET );
+	hr = mf.fnStartup( MF_VERSION, MFSTARTUP_NOSOCKET );
 	if ( FAILED( hr ) )
 	{
 		m_errorString = QStringLiteral( "MFStartup failed (0x%1)" ).arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) );
-		CoUninitialize();
+		close();
 		return false;
 	}
+	m_mfStarted = true;
 
 	QFileInfo fileInfo( filePath );
 	QDir().mkpath( fileInfo.absolutePath() );
@@ -198,35 +234,47 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 	if ( FAILED( hr ) || !m_sinkWriter )
 	{
 		m_errorString = QStringLiteral( "MFCreateSinkWriterFromURL failed (0x%1)" ).arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) );
-		mf.fnShutdown();
-		CoUninitialize();
+		close();
+		QFile::remove( nativePath );
 		return false;
 	}
 
-	// Output MediaType: H.264 video
+	// Output MediaType: H.264 or HEVC video
 	IMFMediaType* pMediaTypeOut = nullptr;
 	hr = mf.fnCreateMediaType( &pMediaTypeOut );
 	if ( FAILED( hr ) )
 	{
 		m_errorString = QStringLiteral( "MFCreateMediaType for output failed" );
 		close();
+		QFile::remove( nativePath );
 		return false;
 	}
 
+	const GUID& targetSubtype = ( m_codec == Codec::H265 )
+		? GUID_MFVideoFormat_HEVC
+		: GUID_MFVideoFormat_H264;
+
 	pMediaTypeOut->SetGUID( GUID_MF_MT_MAJOR_TYPE, GUID_MFMediaType_Video );
-	pMediaTypeOut->SetGUID( GUID_MF_MT_SUBTYPE, GUID_MFVideoFormat_H264 );
+	pMediaTypeOut->SetGUID( GUID_MF_MT_SUBTYPE, targetSubtype );
 	pMediaTypeOut->SetUINT32( GUID_MF_MT_AVG_BITRATE, bitrateKbps * 1000 );
 	pMediaTypeOut->SetUINT32( GUID_MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive );
 	setAttrSize( pMediaTypeOut, GUID_MF_MT_FRAME_SIZE, static_cast<UINT32>( m_width ), static_cast<UINT32>( m_height ) );
 	setAttrRatio( pMediaTypeOut, GUID_MF_MT_FRAME_RATE, static_cast<UINT32>( m_fps ), 1 );
 	setAttrRatio( pMediaTypeOut, GUID_MF_MT_PIXEL_ASPECT_RATIO, 1, 1 );
 
+	if ( m_codec == Codec::H264 )
+	{
+		pMediaTypeOut->SetUINT32( GUID_MF_MT_MPEG2_PROFILE, 77 ); // eAVEncH264VProfile_Main
+	}
+
 	hr = m_sinkWriter->AddStream( pMediaTypeOut, &m_streamIndex );
 	pMediaTypeOut->Release();
 	if ( FAILED( hr ) )
 	{
-		m_errorString = QStringLiteral( "AddStream (H.264) failed (0x%1)" ).arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) );
+		const QString codecName = ( m_codec == Codec::H265 ) ? QStringLiteral( "HEVC/H.265" ) : QStringLiteral( "H.264" );
+		m_errorString = QStringLiteral( "AddStream (%1) failed (0x%2)" ).arg( codecName ).arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) );
 		close();
+		QFile::remove( nativePath );
 		return false;
 	}
 
@@ -237,6 +285,7 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 	{
 		m_errorString = QStringLiteral( "MFCreateMediaType for input failed" );
 		close();
+		QFile::remove( nativePath );
 		return false;
 	}
 
@@ -246,6 +295,7 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 	setAttrSize( pMediaTypeIn, GUID_MF_MT_FRAME_SIZE, static_cast<UINT32>( m_width ), static_cast<UINT32>( m_height ) );
 	setAttrRatio( pMediaTypeIn, GUID_MF_MT_FRAME_RATE, static_cast<UINT32>( m_fps ), 1 );
 	setAttrRatio( pMediaTypeIn, GUID_MF_MT_PIXEL_ASPECT_RATIO, 1, 1 );
+	pMediaTypeIn->SetUINT32( GUID_MF_MT_DEFAULT_STRIDE, static_cast<UINT32>( m_width * 4 ) );
 
 	hr = m_sinkWriter->SetInputMediaType( m_streamIndex, pMediaTypeIn, NULL );
 	pMediaTypeIn->Release();
@@ -253,6 +303,7 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 	{
 		m_errorString = QStringLiteral( "SetInputMediaType (RGB32) failed (0x%1)" ).arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) );
 		close();
+		QFile::remove( nativePath );
 		return false;
 	}
 
@@ -261,6 +312,7 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 	{
 		m_errorString = QStringLiteral( "BeginWriting failed (0x%1)" ).arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) );
 		close();
+		QFile::remove( nativePath );
 		return false;
 	}
 
@@ -365,11 +417,18 @@ void MediaFoundationVideoWriter::close()
 		m_sinkWriter = nullptr;
 	}
 
-	if ( m_initialized )
+	if ( m_mfStarted )
 	{
 		MediaFoundationApi::instance().fnShutdown();
-		CoUninitialize();
-		m_initialized = false;
+		m_mfStarted = false;
 	}
+
+	if ( m_comInitialized )
+	{
+		CoUninitialize();
+		m_comInitialized = false;
+	}
+
+	m_initialized = false;
 #endif
 }

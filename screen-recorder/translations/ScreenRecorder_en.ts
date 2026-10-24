@@ -133,6 +133,10 @@
         <translation>Standard MP4 (H.264)</translation>
     </message>
     <message>
+        <source>High Efficiency MP4 (H.265 / HEVC)</source>
+        <translation>High Efficiency MP4 (H.265 / HEVC)</translation>
+    </message>
+    <message>
         <source>Motion JPEG (AVI)</source>
         <translation>Motion JPEG (AVI)</translation>
     </message>
