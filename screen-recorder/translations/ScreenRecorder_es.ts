@@ -105,6 +105,10 @@
         <translation>Ilimitado</translation>
     </message>
     <message>
+        <source>Save to computer-specific subdirectories</source>
+        <translation>Guardar en subdirectorios específicos por computadora</translation>
+    </message>
+    <message>
         <source>Use fixed resolution</source>
         <translation>Usar resolución fija</translation>
     </message>
