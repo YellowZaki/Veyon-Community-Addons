@@ -30,6 +30,32 @@ static QString sanitizeFilename( const QString& name )
 	return sanitized.trimmed();
 }
 
+static void purgeOldRecordings( const QString& directory, int maxFiles )
+{
+	if ( maxFiles <= 0 || directory.isEmpty() )
+	{
+		return;
+	}
+
+	QDir dir( directory );
+	if ( !dir.exists() )
+	{
+		return;
+	}
+
+	// Filter for video files (.mp4 and .avi if any old ones remain)
+	QFileInfoList files = dir.entryInfoList( { QStringLiteral( "*.mp4" ), QStringLiteral( "*.avi" ) },
+											QDir::Files,
+											QDir::Time | QDir::Reversed ); // Oldest first
+
+	while ( files.size() >= maxFiles )
+	{
+		const QFileInfo oldest = files.takeFirst();
+		vDebug() << "Purging old recording to maintain limit of" << maxFiles << ":" << oldest.absoluteFilePath();
+		QFile::remove( oldest.absoluteFilePath() );
+	}
+}
+
 ScreenRecorderFeaturePlugin::ScreenRecorderFeaturePlugin( QObject* parent ) :
 	QObject( parent ),
 	m_configuration( &VeyonCore::config() ),
@@ -140,13 +166,12 @@ QString ScreenRecorderFeaturePlugin::generateOutputFilePath( const QString& base
 	const QString sanitizedComp = sanitizeFilename( compName );
 	const QString timestamp = QDateTime::currentDateTime().toString( QStringLiteral( "yyyyMMdd_hhmmss" ) );
 
-	QString targetDir = baseDir;
-	if ( m_configuration.saveToComputerSubdirectories() )
-	{
-		targetDir = baseDir + QLatin1Char( '/' ) + sanitizedComp;
-	}
-
+	// Always save to computer-specific subdirectories as requested
+	const QString targetDir = baseDir + QLatin1Char( '/' ) + sanitizedComp;
 	QDir().mkpath( targetDir );
+
+	// Purge oldest recordings if exceeding configured limit
+	purgeOldRecordings( targetDir, m_configuration.maxRecordingsPerComputer() );
 
 	return targetDir + QLatin1Char( '/' ) + sanitizedComp + QLatin1Char( '_' ) + timestamp + extension;
 }

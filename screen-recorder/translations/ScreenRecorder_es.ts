@@ -97,8 +97,12 @@
         <translation>Examinar…</translation>
     </message>
     <message>
-        <source>Save to computer-specific subdirectories</source>
-        <translation>Guardar en subdirectorios específicos por computadora</translation>
+        <source>Maximum recordings per computer:</source>
+        <translation>Máximo de grabaciones por equipo:</translation>
+    </message>
+    <message>
+        <source>Unlimited</source>
+        <translation>Ilimitado</translation>
     </message>
     <message>
         <source>Use fixed resolution</source>

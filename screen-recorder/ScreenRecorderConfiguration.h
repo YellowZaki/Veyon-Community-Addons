@@ -13,6 +13,7 @@
 #define FOREACH_SCREENRECORDER_CONFIG_PROPERTY(OP) \
 	OP( ScreenRecorderConfiguration, m_configuration, QString, outputDirectory, setOutputDirectory, "OutputDirectory", "ScreenRecorder", QString(), Configuration::Property::Flag::Standard ) \
 	OP( ScreenRecorderConfiguration, m_configuration, bool, saveToComputerSubdirectories, setSaveToComputerSubdirectories, "SaveToComputerSubdirectories", "ScreenRecorder", true, Configuration::Property::Flag::Standard ) \
+	OP( ScreenRecorderConfiguration, m_configuration, int, maxRecordingsPerComputer, setMaxRecordingsPerComputer, "MaxRecordingsPerComputer", "ScreenRecorder", 3, Configuration::Property::Flag::Standard ) \
 	OP( ScreenRecorderConfiguration, m_configuration, bool, useFixedResolution, setUseFixedResolution, "UseFixedResolution", "ScreenRecorder", false, Configuration::Property::Flag::Standard ) \
 	OP( ScreenRecorderConfiguration, m_configuration, int, resolutionWidth, setResolutionWidth, "ResolutionWidth", "ScreenRecorder", 1920, Configuration::Property::Flag::Standard ) \
 	OP( ScreenRecorderConfiguration, m_configuration, int, resolutionHeight, setResolutionHeight, "ResolutionHeight", "ScreenRecorder", 1080, Configuration::Property::Flag::Standard ) \

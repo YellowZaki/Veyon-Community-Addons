@@ -97,8 +97,12 @@
         <translation>Browse…</translation>
     </message>
     <message>
-        <source>Save to computer-specific subdirectories</source>
-        <translation>Save to computer-specific subdirectories</translation>
+        <source>Maximum recordings per computer:</source>
+        <translation>Maximum recordings per computer:</translation>
+    </message>
+    <message>
+        <source>Unlimited</source>
+        <translation>Unlimited</translation>
     </message>
     <message>
         <source>Use fixed resolution</source>

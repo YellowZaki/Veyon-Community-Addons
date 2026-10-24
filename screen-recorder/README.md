@@ -25,7 +25,7 @@ Permite grabar en archivos de video MP4 (con H.264 o H.265 / HEVC) las pantallas
    - **Grabación dinámica con clic derecho en caliente:** Permite iniciar o detener la grabación de alumnos individuales haciendo clic derecho sobre su pantalla en cualquier momento, sin reiniciar la sesión ni interrumpir el cronómetro.
 
 4. **Integración completa en Veyon Configurator:**
-   - **Ajustes de salida:** Directorio de destino configurable (por defecto en *Videos/Veyon Recordings*), subdirectorios por nombre de equipo, resolución fija o adaptativa y tasa de cuadros por segundo (FPS).
+   - **Ajustes de salida:** Directorio de destino configurable (por defecto en *Videos/Veyon Recordings*), subdirectorios automáticos por nombre de equipo, límite configurable de grabaciones almacenadas por equipo (purga automática de los vídeos más antiguos, por defecto 3) y resolución/FPS adaptativos o fijos.
    - **Ajustes de codificación:** Selector de formato (MP4 H.264 / MP4 H.265 HEVC) y calidad de video adaptativa (CRF 1-100%, recomendado 70%).
    - **Notificaciones al alumno:** Opción para mostrar un aviso informativo en el escritorio del alumno cuando comience o finalice la grabación.
 

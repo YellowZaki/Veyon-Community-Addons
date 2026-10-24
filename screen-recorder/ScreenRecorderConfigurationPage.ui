@@ -51,10 +51,26 @@
         </item>
        </layout>
       </item>
-      <item row="1" column="0" colspan="2">
-       <widget class="QCheckBox" name="saveToComputerSubdirectories">
+      <item row="1" column="0">
+       <widget class="QLabel" name="label_maxRecordingsPerComputer">
         <property name="text">
-         <string>Save to computer-specific subdirectories</string>
+         <string>Maximum recordings per computer:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QSpinBox" name="maxRecordingsPerComputer">
+        <property name="specialValueText">
+         <string>Unlimited</string>
+        </property>
+        <property name="minimum">
+         <number>0</number>
+        </property>
+        <property name="maximum">
+         <number>999</number>
+        </property>
+        <property name="value">
+         <number>3</number>
         </property>
        </widget>
       </item>
