@@ -358,14 +358,20 @@ bool ScreenRecorderFeaturePlugin::stopRecording( const ComputerControlInterfaceL
 		m_recordingElapsedTimer.invalidate();
 		resetToolbarButton();
 
-		// If master is currently in ScreenRecorder mode and has no sessions left, switch back to monitoring mode
+		// If master is still in ScreenRecorder mode after stopping (e.g. from context menu),
+		// asynchronously switch to monitoring mode so we don't interfere with VeyonMaster::runFeature
 		if ( m_master && m_master->mainWindow() )
 		{
-			auto monitoringBtn = m_master->mainWindow()->findChild<QToolButton*>( QStringLiteral( "MonitoringMode" ) );
-			if ( monitoringBtn )
-			{
-				monitoringBtn->click();
-			}
+			QTimer::singleShot( 50, this, [this]() {
+				if ( m_activeSessions.isEmpty() && m_master && m_master->mainWindow() )
+				{
+					auto monitoringBtn = m_master->mainWindow()->findChild<QToolButton*>( QStringLiteral( "MonitoringMode" ) );
+					if ( monitoringBtn && !monitoringBtn->isChecked() )
+					{
+						monitoringBtn->click();
+					}
+				}
+			} );
 		}
 	}
 	else
@@ -412,11 +418,6 @@ void ScreenRecorderFeaturePlugin::updateToolbarButton()
 	button->setIcon( QIcon( QStringLiteral( ":/screenrecorder/resources/media-record-active.png" ) ) );
 	button->setText( QStringLiteral( "%1\n%2" ).arg( tr( "Stop recording" ), timeStr ) );
 
-	if ( !button->isChecked() )
-	{
-		button->setChecked( true );
-	}
-
 	// Ensure all active recording sessions maintain their activeFeatures badge
 	for ( auto it = m_activeSessions.constBegin(); it != m_activeSessions.constEnd(); ++it )
 	{
@@ -445,10 +446,6 @@ void ScreenRecorderFeaturePlugin::resetToolbarButton()
 	{
 		button->setIcon( QIcon( QStringLiteral( ":/screenrecorder/resources/media-record.png" ) ) );
 		button->setText( tr( "Record" ) );
-		if ( button->isChecked() )
-		{
-			button->setChecked( false );
-		}
 	}
 }
 
