@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <QPointer>
 #include "ConfigurationPagePluginInterface.h"
 #include "FeatureProviderInterface.h"
 #include "ScreenRecorderConfiguration.h"
@@ -112,7 +113,7 @@ private:
 	const FeatureList m_features;
 
 	bool m_isRecording{false};
-	ScreenRecorderControlWidget* m_controlWidget{nullptr};
+	QPointer<ScreenRecorderControlWidget> m_controlWidget;
 	VeyonMasterInterface* m_master{nullptr};
 	QMap<ComputerControlInterface*, QSharedPointer<RecordingSession>> m_activeSessions;
 };

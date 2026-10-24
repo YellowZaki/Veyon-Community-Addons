@@ -16,6 +16,7 @@ ScreenRecorderControlWidget::ScreenRecorderControlWidget( QWidget* parent ) :
 	ui( new Ui::ScreenRecorderControlWidget )
 {
 	ui->setupUi( this );
+	setAttribute( Qt::WA_DeleteOnClose, false );
 
 	connect( &m_tickTimer, &QTimer::timeout, this, &ScreenRecorderControlWidget::onTimerTick );
 	connect( ui->stopButton, &QPushButton::clicked, this, &ScreenRecorderControlWidget::onStopButtonClicked );
@@ -129,10 +130,11 @@ void ScreenRecorderControlWidget::onOpenFolderButtonClicked()
 
 void ScreenRecorderControlWidget::onCloseButtonClicked()
 {
-	close();
+	hide();
 }
 
 void ScreenRecorderControlWidget::closeEvent( QCloseEvent* event )
 {
-	QWidget::closeEvent( event );
+	hide();
+	event->ignore();
 }

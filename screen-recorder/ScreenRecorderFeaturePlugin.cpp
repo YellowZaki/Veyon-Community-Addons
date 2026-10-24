@@ -49,7 +49,10 @@ ScreenRecorderFeaturePlugin::ScreenRecorderFeaturePlugin( QObject* parent ) :
 ScreenRecorderFeaturePlugin::~ScreenRecorderFeaturePlugin()
 {
 	stopRecording();
-	delete m_controlWidget;
+	if ( m_controlWidget )
+	{
+		delete m_controlWidget.data();
+	}
 }
 
 bool ScreenRecorderFeaturePlugin::startFeature( VeyonMasterInterface& master, const Feature& feature,
@@ -206,16 +209,21 @@ bool ScreenRecorderFeaturePlugin::startRecording( VeyonMasterInterface* master,
 		session->worker = new ScreenRecorderEncodingWorker( opts, this );
 
 		// Hook up capture timer to sample frames at regular intervals
-		session->captureTimer = new QTimer( this );
+		session->captureTimer = new QTimer( session.data() );
 		session->captureTimer->setInterval( intervalMs );
 
-		auto rawInterface = controlInterface.data();
+		QWeakPointer<ComputerControlInterface> weakInterface = controlInterface.toWeakRef();
 		auto rawWorker = session->worker;
 
-		connect( session->captureTimer, &QTimer::timeout, this, [rawInterface, rawWorker]() {
-			if ( rawInterface && rawInterface->hasValidFramebuffer() )
+		connect( session->captureTimer, &QTimer::timeout, session.data(), [weakInterface, rawWorker]() {
+			auto iface = weakInterface.toStrongRef();
+			if ( iface && iface->hasValidFramebuffer() )
 			{
-				rawWorker->enqueueFrame( rawInterface->framebuffer() );
+				const QImage frame = iface->framebuffer();
+				if ( !frame.isNull() )
+				{
+					rawWorker->enqueueFrame( frame.copy() );
+				}
 			}
 		} );
 
@@ -225,7 +233,7 @@ bool ScreenRecorderFeaturePlugin::startRecording( VeyonMasterInterface* master,
 		session->worker->start();
 		session->captureTimer->start();
 
-		m_activeSessions.insert( rawInterface, session );
+		m_activeSessions.insert( controlInterface.data(), session );
 	}
 
 	if ( m_activeSessions.isEmpty() )
@@ -248,7 +256,7 @@ bool ScreenRecorderFeaturePlugin::startRecording( VeyonMasterInterface* master,
 		if ( !m_controlWidget )
 		{
 			m_controlWidget = new ScreenRecorderControlWidget( master->mainWindow() );
-			connect( m_controlWidget, &ScreenRecorderControlWidget::stopRecordingRequested,
+			connect( m_controlWidget.data(), &ScreenRecorderControlWidget::stopRecordingRequested,
 					 this, &ScreenRecorderFeaturePlugin::onStopRecordingRequested );
 		}
 		m_controlWidget->start( m_activeSessions.size(), baseDir );
@@ -283,7 +291,6 @@ bool ScreenRecorderFeaturePlugin::stopRecording()
 		if ( session->captureTimer )
 		{
 			session->captureTimer->stop();
-			session->captureTimer->deleteLater();
 			session->captureTimer = nullptr;
 		}
 
@@ -295,7 +302,7 @@ bool ScreenRecorderFeaturePlugin::stopRecording()
 		if ( session->worker )
 		{
 			session->worker->stopRecording();
-			session->worker->deleteLater();
+			delete session->worker;
 			session->worker = nullptr;
 		}
 	}
