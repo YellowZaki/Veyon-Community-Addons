@@ -165,7 +165,7 @@ ScriptRunner::ExecutionResult ScriptRunner::execute( const ScriptPackage& packag
 
 #ifdef Q_OS_WIN
 	process.setCreateProcessArgumentsModifier( []( QProcess::CreateProcessArguments* args ) {
-		args->creationFlags |= CREATE_NO_WINDOW;
+		args->flags |= CREATE_NO_WINDOW;
 	} );
 #endif
 
