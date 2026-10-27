@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>RemoteScriptExecutionConfigurationPage</class>
+ <widget class="QWidget" name="RemoteScriptExecutionConfigurationPage">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>540</width>
+    <height>400</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Remote script execution</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QGroupBox" name="defaultSettingsGroupBox">
+     <property name="title">
+      <string>Configuración por defecto de ejecución remota</string>
+     </property>
+     <layout class="QGridLayout" name="gridLayout">
+      <item row="0" column="0" colspan="2">
+       <widget class="QCheckBox" name="runAsSystem">
+        <property name="text">
+         <string>Ejecutar como SYSTEM / Administrador por defecto (silencioso)</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0" colspan="2">
+       <widget class="QCheckBox" name="autoCleanup">
+        <property name="text">
+         <string>Limpiar automáticamente la carpeta temporal al finalizar</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="label_defaultInterpreter">
+        <property name="text">
+         <string>Intérprete por defecto:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QComboBox" name="defaultInterpreter">
+        <item>
+         <property name="text">
+          <string>Detección automática por extensión</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>PowerShell (.ps1)</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Batch / CMD (.bat / .cmd)</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>VBScript (.vbs)</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Ejecutable directo (.exe)</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="label_timeout">
+        <property name="text">
+         <string>Tiempo límite por defecto (segundos):</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QSpinBox" name="defaultTimeoutSeconds">
+        <property name="maximum">
+         <number>3600</number>
+        </property>
+        <property name="value">
+         <number>60</number>
+        </property>
+        <property name="specialValueText">
+         <string>Sin límite</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="0">
+       <widget class="QLabel" name="label_maxSize">
+        <property name="text">
+         <string>Tamaño máximo del paquete (MB):</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="QSpinBox" name="maxPackageSizeMb">
+        <property name="minimum">
+         <number>1</number>
+        </property>
+        <property name="maximum">
+         <number>1024</number>
+        </property>
+        <property name="value">
+         <number>100</number>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>40</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

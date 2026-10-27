@@ -1,0 +1,28 @@
+#pragma once
+
+#include <QByteArray>
+#include <QString>
+
+namespace QCA {
+
+class KeyGenerator {};
+class PrivateKey {};
+class PublicKey {};
+class SecureArray : public QByteArray
+{
+public:
+	using QByteArray::QByteArray;
+};
+class Initializer {};
+
+enum EncryptionAlgorithm
+{
+	EME_PKCS1_OAEP = 0
+};
+
+enum SignatureAlgorithm
+{
+	EMSA3_SHA512 = 0
+};
+
+} // namespace QCA

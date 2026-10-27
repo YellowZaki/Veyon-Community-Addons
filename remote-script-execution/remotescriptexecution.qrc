@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/remotescriptexecution">
+        <file>resources/remote-script-execution.png</file>
+    </qresource>
+</RCC>

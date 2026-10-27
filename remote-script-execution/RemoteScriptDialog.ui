@@ -1,0 +1,446 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>RemoteScriptDialog</class>
+ <widget class="QDialog" name="RemoteScriptDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>750</width>
+    <height>600</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Ejecución Remota de Scripts y Despliegue</string>
+  </property>
+  <layout class="QVBoxLayout" name="mainVerticalLayout">
+   <item>
+    <widget class="QLabel" name="lblHeader">
+     <property name="text">
+      <string>&lt;b&gt;Despliegue y Ejecución Remota con Privilegios Elevados&lt;/b&gt;</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="lblTargetComputers">
+     <property name="text">
+      <string>Equipos destino seleccionados: 0 equipos</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTabWidget" name="tabWidget">
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <widget class="QWidget" name="tabScript">
+      <attribute name="title">
+       <string>Script Principal</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_tabScript">
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_interpreter">
+         <item>
+          <widget class="QLabel" name="label_interpreter">
+           <property name="text">
+            <string>Tipo de Intérprete:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="comboInterpreter">
+           <item>
+            <property name="text">
+             <string>PowerShell (.ps1)</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Batch / CMD (.bat / .cmd)</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>VBScript (.vbs)</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Ejecutable directo (.exe)</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Detección automática por extensión</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer_interpreter">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btnLoadScriptFile">
+           <property name="text">
+            <string>Cargar archivo...</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblLoadedFile">
+         <property name="text">
+          <string>Archivo cargado: (ninguno, escribiendo código en línea)</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPlainTextEdit" name="txtScriptEditor">
+         <property name="placeholderText">
+          <string>Escribe aquí tu script PowerShell o Batch...
+Ejemplo PowerShell:
+  Start-Process -FilePath &quot;.\mi_instalador.msi&quot; -ArgumentList &quot;/qn /norestart&quot; -Wait
+  Copy-Item -Path &quot;.\config.ini&quot; -Destination &quot;C:\ProgramData\App\&quot; -Force
+  Write-Host &quot;Instalación completada con éxito.&quot;</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_args">
+         <item>
+          <widget class="QLabel" name="label_args">
+           <property name="text">
+            <string>Argumentos de línea de comandos:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="txtScriptArguments">
+           <property name="placeholderText">
+            <string>Opcional: argumentos pasados al script (ej: -param valor /silent)</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tabFiles">
+      <attribute name="title">
+       <string>Archivos y Carpetas adjuntas</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_tabFiles">
+       <item>
+        <widget class="QLabel" name="lblFilesHelp">
+         <property name="text">
+          <string>Los archivos y carpetas adjuntas se extraen en la misma carpeta temporal donde se ejecuta el script. Puedes invocarlos directamente con rutas relativas (ej: .\archivo.exe).</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QTableWidget" name="tblFiles">
+         <property name="columnCount">
+          <number>3</number>
+         </property>
+         <column>
+          <property name="text">
+           <string>Ruta Relativa / Nombre</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Tipo</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Tamaño</string>
+          </property>
+         </column>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_filesButtons">
+         <item>
+          <widget class="QPushButton" name="btnAttachFile">
+           <property name="text">
+            <string>Añadir archivo(s)...</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btnAttachFolder">
+           <property name="text">
+            <string>Añadir carpeta...</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btnRemoveFile">
+           <property name="text">
+            <string>Eliminar seleccionado</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btnClearFiles">
+           <property name="text">
+            <string>Limpiar todo</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer_files">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QLabel" name="lblTotalSize">
+           <property name="text">
+            <string>Tamaño del paquete: 0 KB</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tabOptions">
+      <attribute name="title">
+       <string>Opciones de Ejecución</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_tabOptions">
+       <item>
+        <widget class="QCheckBox" name="chkRunAsSystem">
+         <property name="text">
+          <string>Ejecutar como SYSTEM / Administrador (Silencioso, sin UAC)</string>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblSystemNote">
+         <property name="text">
+          <string>&lt;i&gt;Permite instalar programas, editar registro, cambiar configuración de red y matar procesos sin que el alumno reciba ninguna notificación ni ventana.&lt;/i&gt;</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QCheckBox" name="chkCleanup">
+         <property name="text">
+          <string>Eliminar carpeta temporal del alumno al finalizar</string>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_timeout">
+         <item>
+          <widget class="QLabel" name="label_timeout">
+           <property name="text">
+            <string>Tiempo límite de ejecución (segundos):</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QSpinBox" name="spinTimeout">
+           <property name="maximum">
+            <number>3600</number>
+           </property>
+           <property name="value">
+            <number>120</number>
+           </property>
+           <property name="specialValueText">
+            <string>Sin límite</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer_timeout">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <spacer name="verticalSpacer_options">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tabResults">
+      <attribute name="title">
+       <string>Progreso y Resultados</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_tabResults">
+       <item>
+        <widget class="QSplitter" name="splitterResults">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <widget class="QTableWidget" name="tblResults">
+          <property name="columnCount">
+           <number>5</number>
+          </property>
+          <column>
+           <property name="text">
+            <string>Equipo</string>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>Host / IP</string>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>Estado</string>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>Exit Code</string>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>Duración</string>
+           </property>
+          </column>
+         </widget>
+         <widget class="QWidget" name="widgetLogBottom">
+          <layout class="QVBoxLayout" name="verticalLayout_log">
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayout_logHeader">
+             <item>
+              <widget class="QLabel" name="lblLogTitle">
+               <property name="text">
+                <string>&lt;b&gt;Salida de consola del equipo seleccionado:&lt;/b&gt;</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="horizontalSpacer_log">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btnCopyLog">
+               <property name="text">
+                <string>Copiar salida</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <widget class="QPlainTextEdit" name="txtLogOutput">
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+             <property name="placeholderText">
+              <string>Selecciona un equipo de la tabla para ver su salida de consola en tiempo real...</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_bottom">
+     <item>
+      <widget class="QProgressBar" name="progressBar">
+       <property name="value">
+        <number>0</number>
+       </property>
+       <property name="textVisible">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btnExecute">
+       <property name="text">
+        <string>Ejecutar en los Equipos</string>
+       </property>
+       <property name="default">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btnClose">
+       <property name="text">
+        <string>Cerrar</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
