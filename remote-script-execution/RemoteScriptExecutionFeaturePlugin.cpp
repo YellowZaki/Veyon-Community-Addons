@@ -15,6 +15,8 @@
 #include <QIODevice>
 #include <QThreadPool>
 
+IMPLEMENT_CONFIG_PROXY( RemoteScriptExecutionConfiguration )
+
 RemoteScriptExecutionFeaturePlugin::RemoteScriptExecutionFeaturePlugin( QObject* parent ) :
 	QObject( parent ),
 	m_configuration( &VeyonCore::config() ),
