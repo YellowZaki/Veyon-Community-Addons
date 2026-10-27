@@ -31,7 +31,18 @@ public:
 	static bool isSupported();
 
 private:
+	enum class InputPixelFormat
+	{
+		NV12,
+		RGB32
+	};
+
+	bool createPipeline( const QString& nativePath, Codec codec, bool enableHardwareTransforms );
+	void cleanupSinkWriter( const QString& nativePath );
+	static void convertRgb32ToNv12( const QImage& img, unsigned char* pDst, int width, int height );
+
 	Codec m_codec{Codec::H264};
+	InputPixelFormat m_inputFormat{InputPixelFormat::NV12};
 	IMFSinkWriter* m_sinkWriter{nullptr};
 	unsigned long m_streamIndex{0};
 	bool m_initialized{false};

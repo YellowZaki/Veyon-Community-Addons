@@ -40,6 +40,9 @@ static const GUID GUID_MFVideoFormat_HEVC =
 static const GUID GUID_MFVideoFormat_RGB32 =
 	{ 0x00000016, 0x0000, 0x0010, { 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71 } };
 
+static const GUID GUID_MFVideoFormat_NV12 =
+	{ 0x3231564e, 0x0000, 0x0010, { 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71 } };
+
 static const GUID GUID_MF_MT_AVG_BITRATE =
 	{ 0x20332624, 0xfb0d, 0x4d9e, { 0xbd, 0x0d, 0xcb, 0xf6, 0x78, 0x6c, 0x10, 0x2e } };
 
@@ -84,6 +87,7 @@ public:
 	typedef HRESULT (WINAPI *MFCreateMemoryBuffer_t)(DWORD, IMFMediaBuffer**);
 	typedef HRESULT (WINAPI *MFCreateSample_t)(IMFSample**);
 	typedef HRESULT (WINAPI *MFCreateSinkWriterFromURL_t)(LPCWSTR, IMFByteStream*, IMFAttributes*, IMFSinkWriter**);
+	typedef HRESULT (WINAPI *MFTRegisterLocalByCLSID_t)(REFCLSID, REFGUID, LPCWSTR, UINT32, UINT32, const void*, UINT32, const void*);
 
 	static MediaFoundationApi& instance()
 	{
@@ -100,6 +104,7 @@ public:
 	MFCreateMemoryBuffer_t fnCreateMemoryBuffer{nullptr};
 	MFCreateSample_t fnCreateSample{nullptr};
 	MFCreateSinkWriterFromURL_t fnCreateSinkWriterFromURL{nullptr};
+	MFTRegisterLocalByCLSID_t fnMFTRegisterLocalByCLSID{nullptr};
 
 private:
 	MediaFoundationApi()
@@ -116,6 +121,7 @@ private:
 			fnCreateMemoryBuffer = reinterpret_cast<MFCreateMemoryBuffer_t>( GetProcAddress( m_hMfplat, "MFCreateMemoryBuffer" ) );
 			fnCreateSample = reinterpret_cast<MFCreateSample_t>( GetProcAddress( m_hMfplat, "MFCreateSample" ) );
 			fnCreateSinkWriterFromURL = reinterpret_cast<MFCreateSinkWriterFromURL_t>( GetProcAddress( m_hMfReadWrite, "MFCreateSinkWriterFromURL" ) );
+			fnMFTRegisterLocalByCLSID = reinterpret_cast<MFTRegisterLocalByCLSID_t>( GetProcAddress( m_hMfplat, "MFTRegisterLocalByCLSID" ) );
 
 			m_valid = fnStartup && fnShutdown && fnCreateAttributes && fnCreateMediaType &&
 					  fnCreateMemoryBuffer && fnCreateSample && fnCreateSinkWriterFromURL;
@@ -180,6 +186,246 @@ QString MediaFoundationVideoWriter::errorString() const
 	return m_errorString;
 }
 
+void MediaFoundationVideoWriter::convertRgb32ToNv12( const QImage& img, unsigned char* pDst, int width, int height )
+{
+	unsigned char* yPlane = pDst;
+	unsigned char* uvPlane = pDst + ( width * height );
+
+	for ( int y = 0; y < height; y += 2 )
+	{
+		unsigned char* yRow0 = yPlane + ( y * width );
+		unsigned char* yRow1 = yPlane + ( ( y + 1 ) * width );
+		unsigned char* uvRow = uvPlane + ( ( y / 2 ) * width );
+
+		const QRgb* srcRow0 = reinterpret_cast<const QRgb*>( img.constScanLine( y ) );
+		const QRgb* srcRow1 = reinterpret_cast<const QRgb*>( img.constScanLine( y + 1 ) );
+
+		for ( int x = 0; x < width; x += 2 )
+		{
+			const QRgb p00 = srcRow0[x];
+			const QRgb p01 = srcRow0[x + 1];
+			const QRgb p10 = srcRow1[x];
+			const QRgb p11 = srcRow1[x + 1];
+
+			const int r00 = qRed( p00 ), g00 = qGreen( p00 ), b00 = qBlue( p00 );
+			const int r01 = qRed( p01 ), g01 = qGreen( p01 ), b01 = qBlue( p01 );
+			const int r10 = qRed( p10 ), g10 = qGreen( p10 ), b10 = qBlue( p10 );
+			const int r11 = qRed( p11 ), g11 = qGreen( p11 ), b11 = qBlue( p11 );
+
+			// ITU-R BT.601 standard RGB to Y conversion
+			yRow0[x]     = static_cast<unsigned char>( qBound( 0, ( (  66 * r00 + 129 * g00 +  25 * b00 + 128 ) >> 8 ) + 16, 255 ) );
+			yRow0[x + 1] = static_cast<unsigned char>( qBound( 0, ( (  66 * r01 + 129 * g01 +  25 * b01 + 128 ) >> 8 ) + 16, 255 ) );
+			yRow1[x]     = static_cast<unsigned char>( qBound( 0, ( (  66 * r10 + 129 * g10 +  25 * b10 + 128 ) >> 8 ) + 16, 255 ) );
+			yRow1[x + 1] = static_cast<unsigned char>( qBound( 0, ( (  66 * r11 + 129 * g11 +  25 * b11 + 128 ) >> 8 ) + 16, 255 ) );
+
+			// Average RGB in 2x2 chroma subsample block
+			const int avgR = ( r00 + r01 + r10 + r11 + 2 ) >> 2;
+			const int avgG = ( g00 + g01 + g10 + g11 + 2 ) >> 2;
+			const int avgB = ( b00 + b01 + b10 + b11 + 2 ) >> 2;
+
+			// ITU-R BT.601 standard RGB to UV conversion
+			const int u = ( ( -38 * avgR - 74 * avgG + 112 * avgB + 128 ) >> 8 ) + 128;
+			const int v = ( ( 112 * avgR - 94 * avgG -  18 * avgB + 128 ) >> 8 ) + 128;
+
+			uvRow[x]     = static_cast<unsigned char>( qBound( 0, u, 255 ) );
+			uvRow[x + 1] = static_cast<unsigned char>( qBound( 0, v, 255 ) );
+		}
+	}
+}
+
+void MediaFoundationVideoWriter::cleanupSinkWriter( const QString& nativePath )
+{
+#ifdef Q_OS_WIN
+	if ( m_sinkWriter )
+	{
+		m_sinkWriter->Release();
+		m_sinkWriter = nullptr;
+	}
+	QFile::remove( nativePath );
+#else
+	Q_UNUSED( nativePath )
+#endif
+}
+
+bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Codec codec, bool enableHardwareTransforms )
+{
+#ifdef Q_OS_WIN
+	auto& mf = MediaFoundationApi::instance();
+
+	IMFAttributes* pAttributes = nullptr;
+	HRESULT hr = mf.fnCreateAttributes( &pAttributes, 2 );
+	if ( SUCCEEDED( hr ) && pAttributes )
+	{
+		if ( enableHardwareTransforms )
+		{
+			pAttributes->SetUINT32( GUID_MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, TRUE );
+		}
+		pAttributes->SetUINT32( GUID_MF_SINK_WRITER_DISABLE_THROTTLING, TRUE );
+	}
+
+	hr = mf.fnCreateSinkWriterFromURL( reinterpret_cast<LPCWSTR>( nativePath.utf16() ),
+									   NULL,
+									   pAttributes,
+									   &m_sinkWriter );
+	if ( pAttributes )
+	{
+		pAttributes->Release();
+		pAttributes = nullptr;
+	}
+
+	if ( FAILED( hr ) || !m_sinkWriter )
+	{
+		m_errorString = QStringLiteral( "MFCreateSinkWriterFromURL failed (0x%1)" )
+							.arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) );
+		return false;
+	}
+
+	// Output MediaType: H.264 or HEVC video
+	IMFMediaType* pMediaTypeOut = nullptr;
+	hr = mf.fnCreateMediaType( &pMediaTypeOut );
+	if ( FAILED( hr ) || !pMediaTypeOut )
+	{
+		m_errorString = QStringLiteral( "MFCreateMediaType for output failed" );
+		return false;
+	}
+
+	const GUID& targetSubtype = ( codec == Codec::H265 )
+		? GUID_MFVideoFormat_HEVC
+		: GUID_MFVideoFormat_H264;
+
+	pMediaTypeOut->SetGUID( GUID_MF_MT_MAJOR_TYPE, GUID_MFMediaType_Video );
+	pMediaTypeOut->SetGUID( GUID_MF_MT_SUBTYPE, targetSubtype );
+
+	const UINT32 nominalBitrate = static_cast<UINT32>( m_quality * 50000 );
+	pMediaTypeOut->SetUINT32( GUID_MF_MT_AVG_BITRATE, nominalBitrate );
+	pMediaTypeOut->SetUINT32( GUID_MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive );
+	setAttrSize( pMediaTypeOut, GUID_MF_MT_FRAME_SIZE, static_cast<UINT32>( m_width ), static_cast<UINT32>( m_height ) );
+	setAttrRatio( pMediaTypeOut, GUID_MF_MT_FRAME_RATE, static_cast<UINT32>( m_fps ), 1 );
+	setAttrRatio( pMediaTypeOut, GUID_MF_MT_PIXEL_ASPECT_RATIO, 1, 1 );
+
+	if ( codec == Codec::H264 )
+	{
+		pMediaTypeOut->SetUINT32( GUID_MF_MT_MPEG2_PROFILE, 77 ); // eAVEncH264VProfile_Main
+	}
+
+	hr = m_sinkWriter->AddStream( pMediaTypeOut, &m_streamIndex );
+	pMediaTypeOut->Release();
+	if ( FAILED( hr ) )
+	{
+		const QString codecName = ( codec == Codec::H265 ) ? QStringLiteral( "HEVC/H.265" ) : QStringLiteral( "H.264" );
+		m_errorString = QStringLiteral( "AddStream (%1) failed (0x%2)" )
+							.arg( codecName )
+							.arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) );
+		return false;
+	}
+
+	// Try input media types: NV12 first (natively supported by Intel, AMD, NVIDIA, and Microsoft encoders)
+	bool inputConfigured = false;
+
+	IMFMediaType* pMediaTypeIn = nullptr;
+	hr = mf.fnCreateMediaType( &pMediaTypeIn );
+	if ( SUCCEEDED( hr ) && pMediaTypeIn )
+	{
+		pMediaTypeIn->SetGUID( GUID_MF_MT_MAJOR_TYPE, GUID_MFMediaType_Video );
+		pMediaTypeIn->SetGUID( GUID_MF_MT_SUBTYPE, GUID_MFVideoFormat_NV12 );
+		pMediaTypeIn->SetUINT32( GUID_MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive );
+		setAttrSize( pMediaTypeIn, GUID_MF_MT_FRAME_SIZE, static_cast<UINT32>( m_width ), static_cast<UINT32>( m_height ) );
+		setAttrRatio( pMediaTypeIn, GUID_MF_MT_FRAME_RATE, static_cast<UINT32>( m_fps ), 1 );
+		setAttrRatio( pMediaTypeIn, GUID_MF_MT_PIXEL_ASPECT_RATIO, 1, 1 );
+		pMediaTypeIn->SetUINT32( GUID_MF_MT_DEFAULT_STRIDE, static_cast<UINT32>( m_width ) );
+
+		IMFAttributes* pEncAttrs = nullptr;
+		hr = mf.fnCreateAttributes( &pEncAttrs, 2 );
+		if ( SUCCEEDED( hr ) && pEncAttrs )
+		{
+			pEncAttrs->SetUINT32( GUID_CODECAPI_AVEncCommonRateControlMode, 3 );
+			pEncAttrs->SetUINT32( GUID_CODECAPI_AVEncCommonQuality, static_cast<UINT32>( m_quality ) );
+		}
+
+		hr = m_sinkWriter->SetInputMediaType( m_streamIndex, pMediaTypeIn, pEncAttrs );
+		if ( FAILED( hr ) && pEncAttrs )
+		{
+			hr = m_sinkWriter->SetInputMediaType( m_streamIndex, pMediaTypeIn, NULL );
+		}
+		if ( pEncAttrs )
+		{
+			pEncAttrs->Release();
+		}
+		pMediaTypeIn->Release();
+
+		if ( SUCCEEDED( hr ) )
+		{
+			m_inputFormat = InputPixelFormat::NV12;
+			inputConfigured = true;
+		}
+	}
+
+	// Fallback to RGB32 if NV12 was not accepted
+	if ( !inputConfigured )
+	{
+		pMediaTypeIn = nullptr;
+		hr = mf.fnCreateMediaType( &pMediaTypeIn );
+		if ( SUCCEEDED( hr ) && pMediaTypeIn )
+		{
+			pMediaTypeIn->SetGUID( GUID_MF_MT_MAJOR_TYPE, GUID_MFMediaType_Video );
+			pMediaTypeIn->SetGUID( GUID_MF_MT_SUBTYPE, GUID_MFVideoFormat_RGB32 );
+			pMediaTypeIn->SetUINT32( GUID_MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive );
+			setAttrSize( pMediaTypeIn, GUID_MF_MT_FRAME_SIZE, static_cast<UINT32>( m_width ), static_cast<UINT32>( m_height ) );
+			setAttrRatio( pMediaTypeIn, GUID_MF_MT_FRAME_RATE, static_cast<UINT32>( m_fps ), 1 );
+			setAttrRatio( pMediaTypeIn, GUID_MF_MT_PIXEL_ASPECT_RATIO, 1, 1 );
+			pMediaTypeIn->SetUINT32( GUID_MF_MT_DEFAULT_STRIDE, static_cast<UINT32>( m_width * 4 ) );
+
+			IMFAttributes* pEncAttrs = nullptr;
+			hr = mf.fnCreateAttributes( &pEncAttrs, 2 );
+			if ( SUCCEEDED( hr ) && pEncAttrs )
+			{
+				pEncAttrs->SetUINT32( GUID_CODECAPI_AVEncCommonRateControlMode, 3 );
+				pEncAttrs->SetUINT32( GUID_CODECAPI_AVEncCommonQuality, static_cast<UINT32>( m_quality ) );
+			}
+
+			hr = m_sinkWriter->SetInputMediaType( m_streamIndex, pMediaTypeIn, pEncAttrs );
+			if ( FAILED( hr ) && pEncAttrs )
+			{
+				hr = m_sinkWriter->SetInputMediaType( m_streamIndex, pMediaTypeIn, NULL );
+			}
+			if ( pEncAttrs )
+			{
+				pEncAttrs->Release();
+			}
+			pMediaTypeIn->Release();
+
+			if ( SUCCEEDED( hr ) )
+			{
+				m_inputFormat = InputPixelFormat::RGB32;
+				inputConfigured = true;
+			}
+		}
+	}
+
+	if ( !inputConfigured )
+	{
+		m_errorString = QStringLiteral( "SetInputMediaType (NV12 & RGB32) failed (0x%1)" )
+							.arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) );
+		return false;
+	}
+
+	hr = m_sinkWriter->BeginWriting();
+	if ( FAILED( hr ) )
+	{
+		m_errorString = QStringLiteral( "BeginWriting failed (0x%1)" )
+							.arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) );
+		return false;
+	}
+
+	return true;
+#else
+	Q_UNUSED( nativePath )
+	Q_UNUSED( codec )
+	Q_UNUSED( enableHardwareTransforms )
+	return false;
+#endif
+}
+
 bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int height, int fps, int quality )
 {
 	close();
@@ -198,7 +444,7 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 		return false;
 	}
 
-	// Dimensions must be even for H.264 / HEVC
+	// Dimensions must be even for H.264 / HEVC / NV12
 	m_width = ( width + 1 ) & ~1;
 	m_height = ( height + 1 ) & ~1;
 	m_fps = fps;
@@ -216,140 +462,65 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 	}
 	m_mfStarted = true;
 
+	if ( mf.fnMFTRegisterLocalByCLSID )
+	{
+		static const GUID GUID_CColorConvertDMO =
+			{ 0x98230571, 0x0087, 0x4204, { 0x97, 0xba, 0x08, 0x3c, 0x53, 0x36, 0x30, 0x7b } };
+		static const GUID GUID_MFT_CATEGORY_VIDEO_PROCESSOR =
+			{ 0xf79eac7d, 0xe545, 0x4387, { 0xbd, 0xee, 0xd6, 0x47, 0xd7, 0xbd, 0xe4, 0x2a } };
+		static const UINT32 MFT_ENUM_FLAG_SYNCMFT = 0x00000001;
+
+		mf.fnMFTRegisterLocalByCLSID(
+			GUID_CColorConvertDMO,
+			GUID_MFT_CATEGORY_VIDEO_PROCESSOR,
+			L"",
+			MFT_ENUM_FLAG_SYNCMFT,
+			0, NULL, 0, NULL );
+	}
+
 	QFileInfo fileInfo( filePath );
 	QDir().mkpath( fileInfo.absolutePath() );
-
-	IMFAttributes* pAttributes = nullptr;
-	hr = mf.fnCreateAttributes( &pAttributes, 2 );
-	if ( SUCCEEDED( hr ) && pAttributes )
-	{
-		pAttributes->SetUINT32( GUID_MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, TRUE );
-		pAttributes->SetUINT32( GUID_MF_SINK_WRITER_DISABLE_THROTTLING, TRUE );
-	}
-
 	const QString nativePath = QDir::toNativeSeparators( filePath );
-	hr = mf.fnCreateSinkWriterFromURL( reinterpret_cast<LPCWSTR>( nativePath.utf16() ),
-									   NULL,
-									   pAttributes,
-									   &m_sinkWriter );
-	if ( pAttributes )
+
+	// Fallback strategy:
+	// 1. Preferred codec with GPU hardware acceleration
+	bool ok = createPipeline( nativePath, m_codec, true /* hardware */ );
+
+	// 2. Preferred codec with pure CPU software encoder
+	if ( !ok )
 	{
-		pAttributes->Release();
-		pAttributes = nullptr;
+		cleanupSinkWriter( nativePath );
+		ok = createPipeline( nativePath, m_codec, false /* software */ );
 	}
 
-	if ( FAILED( hr ) || !m_sinkWriter )
+	// 3. If HEVC requested but unsupported by system, fall back to H.264 (hardware then software)
+	if ( !ok && m_codec == Codec::H265 )
 	{
-		m_errorString = QStringLiteral( "MFCreateSinkWriterFromURL failed (0x%1)" ).arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) );
+		m_codec = Codec::H264;
+		cleanupSinkWriter( nativePath );
+		ok = createPipeline( nativePath, Codec::H264, true /* hardware */ );
+		if ( !ok )
+		{
+			cleanupSinkWriter( nativePath );
+			ok = createPipeline( nativePath, Codec::H264, false /* software */ );
+		}
+	}
+
+	if ( !ok )
+	{
+		cleanupSinkWriter( nativePath );
 		close();
-		QFile::remove( nativePath );
-		return false;
-	}
-
-	// Output MediaType: H.264 or HEVC video
-	IMFMediaType* pMediaTypeOut = nullptr;
-	hr = mf.fnCreateMediaType( &pMediaTypeOut );
-	if ( FAILED( hr ) )
-	{
-		m_errorString = QStringLiteral( "MFCreateMediaType for output failed" );
-		close();
-		QFile::remove( nativePath );
-		return false;
-	}
-
-	const GUID& targetSubtype = ( m_codec == Codec::H265 )
-		? GUID_MFVideoFormat_HEVC
-		: GUID_MFVideoFormat_H264;
-
-	pMediaTypeOut->SetGUID( GUID_MF_MT_MAJOR_TYPE, GUID_MFMediaType_Video );
-	pMediaTypeOut->SetGUID( GUID_MF_MT_SUBTYPE, targetSubtype );
-
-	// Nominal bitrate ceiling based on quality factor (bps)
-	const UINT32 nominalBitrate = static_cast<UINT32>( m_quality * 50000 );
-	pMediaTypeOut->SetUINT32( GUID_MF_MT_AVG_BITRATE, nominalBitrate );
-	pMediaTypeOut->SetUINT32( GUID_MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive );
-	setAttrSize( pMediaTypeOut, GUID_MF_MT_FRAME_SIZE, static_cast<UINT32>( m_width ), static_cast<UINT32>( m_height ) );
-	setAttrRatio( pMediaTypeOut, GUID_MF_MT_FRAME_RATE, static_cast<UINT32>( m_fps ), 1 );
-	setAttrRatio( pMediaTypeOut, GUID_MF_MT_PIXEL_ASPECT_RATIO, 1, 1 );
-
-	if ( m_codec == Codec::H264 )
-	{
-		pMediaTypeOut->SetUINT32( GUID_MF_MT_MPEG2_PROFILE, 77 ); // eAVEncH264VProfile_Main
-	}
-
-	hr = m_sinkWriter->AddStream( pMediaTypeOut, &m_streamIndex );
-	pMediaTypeOut->Release();
-	if ( FAILED( hr ) )
-	{
-		const QString codecName = ( m_codec == Codec::H265 ) ? QStringLiteral( "HEVC/H.265" ) : QStringLiteral( "H.264" );
-		m_errorString = QStringLiteral( "AddStream (%1) failed (0x%2)" ).arg( codecName ).arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) );
-		close();
-		QFile::remove( nativePath );
-		return false;
-	}
-
-	// Input MediaType: RGB32
-	IMFMediaType* pMediaTypeIn = nullptr;
-	hr = mf.fnCreateMediaType( &pMediaTypeIn );
-	if ( FAILED( hr ) )
-	{
-		m_errorString = QStringLiteral( "MFCreateMediaType for input failed" );
-		close();
-		QFile::remove( nativePath );
-		return false;
-	}
-
-	pMediaTypeIn->SetGUID( GUID_MF_MT_MAJOR_TYPE, GUID_MFMediaType_Video );
-	pMediaTypeIn->SetGUID( GUID_MF_MT_SUBTYPE, GUID_MFVideoFormat_RGB32 );
-	pMediaTypeIn->SetUINT32( GUID_MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive );
-	setAttrSize( pMediaTypeIn, GUID_MF_MT_FRAME_SIZE, static_cast<UINT32>( m_width ), static_cast<UINT32>( m_height ) );
-	setAttrRatio( pMediaTypeIn, GUID_MF_MT_FRAME_RATE, static_cast<UINT32>( m_fps ), 1 );
-	setAttrRatio( pMediaTypeIn, GUID_MF_MT_PIXEL_ASPECT_RATIO, 1, 1 );
-	pMediaTypeIn->SetUINT32( GUID_MF_MT_DEFAULT_STRIDE, static_cast<UINT32>( m_width * 4 ) );
-
-	// Configure Quality-based VBR (CRF equivalent in Media Foundation)
-	IMFAttributes* pEncAttrs = nullptr;
-	hr = mf.fnCreateAttributes( &pEncAttrs, 2 );
-	if ( SUCCEEDED( hr ) && pEncAttrs )
-	{
-		// 3 = eAVEncCommonRateControlMode_Quality
-		pEncAttrs->SetUINT32( GUID_CODECAPI_AVEncCommonRateControlMode, 3 );
-		pEncAttrs->SetUINT32( GUID_CODECAPI_AVEncCommonQuality, static_cast<UINT32>( m_quality ) );
-	}
-
-	hr = m_sinkWriter->SetInputMediaType( m_streamIndex, pMediaTypeIn, pEncAttrs );
-	if ( FAILED( hr ) && pEncAttrs )
-	{
-		// Graceful fallback if specific GPU driver MFT rejects the rate control property
-		hr = m_sinkWriter->SetInputMediaType( m_streamIndex, pMediaTypeIn, NULL );
-	}
-	if ( pEncAttrs )
-	{
-		pEncAttrs->Release();
-		pEncAttrs = nullptr;
-	}
-
-	pMediaTypeIn->Release();
-	if ( FAILED( hr ) )
-	{
-		m_errorString = QStringLiteral( "SetInputMediaType (RGB32) failed (0x%1)" ).arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) );
-		close();
-		QFile::remove( nativePath );
-		return false;
-	}
-
-	hr = m_sinkWriter->BeginWriting();
-	if ( FAILED( hr ) )
-	{
-		m_errorString = QStringLiteral( "BeginWriting failed (0x%1)" ).arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) );
-		close();
-		QFile::remove( nativePath );
 		return false;
 	}
 
 	m_initialized = true;
 	return true;
 #else
+	Q_UNUSED( filePath )
+	Q_UNUSED( width )
+	Q_UNUSED( height )
+	Q_UNUSED( fps )
+	Q_UNUSED( quality )
 	m_errorString = QStringLiteral( "Media Foundation is only available on Windows" );
 	return false;
 #endif
@@ -375,41 +546,70 @@ bool MediaFoundationVideoWriter::writeFrame( const QImage& frame, qint64 timesta
 	{
 		img = img.scaled( m_width, m_height, Qt::IgnoreAspectRatio, Qt::SmoothTransformation );
 	}
-	if ( img.format() != QImage::Format_RGB32 && img.format() != QImage::Format_ARGB32_Premultiplied )
+	if ( img.format() != QImage::Format_RGB32 && img.format() != QImage::Format_ARGB32 )
 	{
 		img = img.convertToFormat( QImage::Format_RGB32 );
 	}
 
-	const DWORD cbWidth = static_cast<DWORD>( m_width * 4 );
-	const DWORD cbBuffer = cbWidth * static_cast<DWORD>( m_height );
-
 	IMFMediaBuffer* pBuffer = nullptr;
-	HRESULT hr = mf.fnCreateMemoryBuffer( cbBuffer, &pBuffer );
-	if ( FAILED( hr ) || !pBuffer )
+	HRESULT hr = S_OK;
+
+	if ( m_inputFormat == InputPixelFormat::NV12 )
 	{
-		m_errorString = QStringLiteral( "MFCreateMemoryBuffer failed" );
-		return false;
+		const DWORD cbBuffer = static_cast<DWORD>( ( m_width * m_height * 3 ) / 2 );
+		hr = mf.fnCreateMemoryBuffer( cbBuffer, &pBuffer );
+		if ( FAILED( hr ) || !pBuffer )
+		{
+			m_errorString = QStringLiteral( "MFCreateMemoryBuffer failed" );
+			return false;
+		}
+
+		BYTE* pData = nullptr;
+		hr = pBuffer->Lock( &pData, NULL, NULL );
+		if ( SUCCEEDED( hr ) && pData )
+		{
+			convertRgb32ToNv12( img, pData, m_width, m_height );
+			pBuffer->Unlock();
+			pBuffer->SetCurrentLength( cbBuffer );
+		}
+	}
+	else
+	{
+		const DWORD cbWidth = static_cast<DWORD>( m_width * 4 );
+		const DWORD cbBuffer = cbWidth * static_cast<DWORD>( m_height );
+
+		hr = mf.fnCreateMemoryBuffer( cbBuffer, &pBuffer );
+		if ( FAILED( hr ) || !pBuffer )
+		{
+			m_errorString = QStringLiteral( "MFCreateMemoryBuffer failed" );
+			return false;
+		}
+
+		BYTE* pData = nullptr;
+		hr = pBuffer->Lock( &pData, NULL, NULL );
+		if ( SUCCEEDED( hr ) && pData )
+		{
+			const BYTE* pSrc = img.constBits();
+			const int srcBytesPerLine = img.bytesPerLine();
+			if ( srcBytesPerLine == static_cast<int>( cbWidth ) )
+			{
+				memcpy( pData, pSrc, cbBuffer );
+			}
+			else
+			{
+				for ( int y = 0; y < m_height; ++y )
+				{
+					memcpy( pData + ( y * cbWidth ), pSrc + ( y * srcBytesPerLine ), cbWidth );
+				}
+			}
+			pBuffer->Unlock();
+			pBuffer->SetCurrentLength( cbBuffer );
+		}
 	}
 
-	BYTE* pData = nullptr;
-	hr = pBuffer->Lock( &pData, NULL, NULL );
-	if ( SUCCEEDED( hr ) && pData )
+	if ( FAILED( hr ) || !pBuffer )
 	{
-		const BYTE* pSrc = img.constBits();
-		const int srcBytesPerLine = img.bytesPerLine();
-		if ( srcBytesPerLine == static_cast<int>( cbWidth ) )
-		{
-			memcpy( pData, pSrc, cbBuffer );
-		}
-		else
-		{
-			for ( int y = 0; y < m_height; ++y )
-			{
-				memcpy( pData + ( y * cbWidth ), pSrc + ( y * srcBytesPerLine ), cbWidth );
-			}
-		}
-		pBuffer->Unlock();
-		pBuffer->SetCurrentLength( cbBuffer );
+		return false;
 	}
 
 	IMFSample* pSample = nullptr;
