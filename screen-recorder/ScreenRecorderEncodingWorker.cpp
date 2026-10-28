@@ -121,8 +121,8 @@ QImage ScreenRecorderEncodingWorker::processFrameDimensions( const QImage& frame
 		return frame.scaled( targetW, targetH, Qt::IgnoreAspectRatio, Qt::SmoothTransformation );
 	}
 
-	// Dynamic resolution: ensure even dimensions for H.264 / codecs
-	const int evenW = ( frame.width() + 1 ) & ~1;
+	// Dynamic resolution: ensure macroblock-aligned width (divisible by 16) and even height (divisible by 2)
+	const int evenW = ( frame.width() + 15 ) & ~15;
 	const int evenH = ( frame.height() + 1 ) & ~1;
 
 	if ( frame.width() != evenW || frame.height() != evenH )
@@ -137,6 +137,9 @@ bool ScreenRecorderEncodingWorker::initializeWriter( const QImage& firstFrame )
 {
 	const int width = firstFrame.width();
 	const int height = firstFrame.height();
+
+	vDebug() << "initializeWriter starting for" << m_options.computerName
+			 << "frame resolution:" << width << "x" << height;
 
 	if ( MediaFoundationVideoWriter::isSupported() )
 	{
@@ -155,8 +158,9 @@ bool ScreenRecorderEncodingWorker::initializeWriter( const QImage& firstFrame )
 			return true;
 		}
 
-		vCritical() << "MediaFoundationVideoWriter failed:" << mfWriter->errorString();
 		const QString err = mfWriter->errorString();
+		vCritical() << "MediaFoundationVideoWriter failed for" << m_options.computerName
+					<< "(" << width << "x" << height << "):" << err;
 		delete mfWriter;
 		Q_EMIT recordingError( err );
 		return false;

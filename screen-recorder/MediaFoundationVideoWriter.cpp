@@ -58,23 +58,11 @@ static const GUID GUID_MF_MT_PIXEL_ASPECT_RATIO =
 static const GUID GUID_MF_MT_INTERLACE_MODE =
 	{ 0xe2724bb8, 0xe676, 0x4806, { 0xb4, 0xb2, 0xa8, 0xd6, 0xef, 0x54, 0xd2, 0xf6 } };
 
-static const GUID GUID_MF_MT_DEFAULT_STRIDE =
-	{ 0x644b4e48, 0x1e02, 0x4516, { 0xb0, 0xeb, 0xc0, 0x1c, 0xa9, 0xd4, 0x9a, 0xc6 } };
-
-static const GUID GUID_MF_MT_MPEG2_PROFILE =
-	{ 0xad76a80b, 0x2d5c, 0x4e0b, { 0xb3, 0x75, 0x64, 0xe5, 0x20, 0x13, 0x70, 0x36 } };
-
 static const GUID GUID_MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS =
 	{ 0xa634a91c, 0x822b, 0x41b9, { 0xa4, 0x94, 0x4d, 0xe4, 0x64, 0x36, 0x12, 0xb0 } };
 
 static const GUID GUID_MF_SINK_WRITER_DISABLE_THROTTLING =
 	{ 0x08b845d8, 0x2b74, 0x4afe, { 0x9d, 0x53, 0xbe, 0x16, 0xd2, 0xd5, 0xae, 0x4f } };
-
-static const GUID GUID_CODECAPI_AVEncCommonRateControlMode =
-	{ 0x1c0608e9, 0x399c, 0x4158, { 0xa4, 0x96, 0xd1, 0xf5, 0xb1, 0xa7, 0x74, 0x1d } };
-
-static const GUID GUID_CODECAPI_AVEncCommonQuality =
-	{ 0xfcbfcfdd, 0x03af, 0x477b, { 0xa7, 0xc1, 0x4b, 0x71, 0xfa, 0xfa, 0xd5, 0xbb } };
 
 // Dynamic loader for Media Foundation functions
 class MediaFoundationApi
@@ -247,7 +235,7 @@ void MediaFoundationVideoWriter::cleanupSinkWriter( const QString& nativePath )
 #endif
 }
 
-bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Codec codec, bool enableHardwareTransforms )
+bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Codec codec, bool enableHardwareTransforms, int width, int height )
 {
 #ifdef Q_OS_WIN
 	auto& mf = MediaFoundationApi::instance();
@@ -299,29 +287,28 @@ bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Code
 	const UINT32 nominalBitrate = static_cast<UINT32>( m_quality * 50000 );
 	pMediaTypeOut->SetUINT32( GUID_MF_MT_AVG_BITRATE, nominalBitrate );
 	pMediaTypeOut->SetUINT32( GUID_MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive );
-	setAttrSize( pMediaTypeOut, GUID_MF_MT_FRAME_SIZE, static_cast<UINT32>( m_width ), static_cast<UINT32>( m_height ) );
+	setAttrSize( pMediaTypeOut, GUID_MF_MT_FRAME_SIZE, static_cast<UINT32>( width ), static_cast<UINT32>( height ) );
 	setAttrRatio( pMediaTypeOut, GUID_MF_MT_FRAME_RATE, static_cast<UINT32>( m_fps ), 1 );
 	setAttrRatio( pMediaTypeOut, GUID_MF_MT_PIXEL_ASPECT_RATIO, 1, 1 );
-
-	if ( codec == Codec::H264 )
-	{
-		pMediaTypeOut->SetUINT32( GUID_MF_MT_MPEG2_PROFILE, 77 ); // eAVEncH264VProfile_Main
-	}
 
 	hr = m_sinkWriter->AddStream( pMediaTypeOut, &m_streamIndex );
 	pMediaTypeOut->Release();
 	if ( FAILED( hr ) )
 	{
 		const QString codecName = ( codec == Codec::H265 ) ? QStringLiteral( "HEVC/H.265" ) : QStringLiteral( "H.264" );
-		m_errorString = QStringLiteral( "AddStream (%1) failed (0x%2)" )
+		m_errorString = QStringLiteral( "AddStream (%1) failed (0x%2) for %3x%4" )
 							.arg( codecName )
-							.arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) );
+							.arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) )
+							.arg( width )
+							.arg( height );
 		return false;
 	}
 
 	// Try input media types: NV12 first (natively supported by Intel, AMD, NVIDIA, and Microsoft encoders)
+	// DO NOT set MF_MT_DEFAULT_STRIDE or encoder attributes: let SinkWriter negotiate automatically.
 	bool inputConfigured = false;
 
+	// 1. Try NV12
 	IMFMediaType* pMediaTypeIn = nullptr;
 	hr = mf.fnCreateMediaType( &pMediaTypeIn );
 	if ( SUCCEEDED( hr ) && pMediaTypeIn )
@@ -329,38 +316,23 @@ bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Code
 		pMediaTypeIn->SetGUID( GUID_MF_MT_MAJOR_TYPE, GUID_MFMediaType_Video );
 		pMediaTypeIn->SetGUID( GUID_MF_MT_SUBTYPE, GUID_MFVideoFormat_NV12 );
 		pMediaTypeIn->SetUINT32( GUID_MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive );
-		setAttrSize( pMediaTypeIn, GUID_MF_MT_FRAME_SIZE, static_cast<UINT32>( m_width ), static_cast<UINT32>( m_height ) );
+		setAttrSize( pMediaTypeIn, GUID_MF_MT_FRAME_SIZE, static_cast<UINT32>( width ), static_cast<UINT32>( height ) );
 		setAttrRatio( pMediaTypeIn, GUID_MF_MT_FRAME_RATE, static_cast<UINT32>( m_fps ), 1 );
 		setAttrRatio( pMediaTypeIn, GUID_MF_MT_PIXEL_ASPECT_RATIO, 1, 1 );
-		pMediaTypeIn->SetUINT32( GUID_MF_MT_DEFAULT_STRIDE, static_cast<UINT32>( m_width ) );
 
-		IMFAttributes* pEncAttrs = nullptr;
-		hr = mf.fnCreateAttributes( &pEncAttrs, 2 );
-		if ( SUCCEEDED( hr ) && pEncAttrs )
-		{
-			pEncAttrs->SetUINT32( GUID_CODECAPI_AVEncCommonRateControlMode, 3 );
-			pEncAttrs->SetUINT32( GUID_CODECAPI_AVEncCommonQuality, static_cast<UINT32>( m_quality ) );
-		}
-
-		hr = m_sinkWriter->SetInputMediaType( m_streamIndex, pMediaTypeIn, pEncAttrs );
-		if ( FAILED( hr ) && pEncAttrs )
-		{
-			hr = m_sinkWriter->SetInputMediaType( m_streamIndex, pMediaTypeIn, NULL );
-		}
-		if ( pEncAttrs )
-		{
-			pEncAttrs->Release();
-		}
+		hr = m_sinkWriter->SetInputMediaType( m_streamIndex, pMediaTypeIn, NULL );
 		pMediaTypeIn->Release();
 
 		if ( SUCCEEDED( hr ) )
 		{
 			m_inputFormat = InputPixelFormat::NV12;
+			m_width = width;
+			m_height = height;
 			inputConfigured = true;
 		}
 	}
 
-	// Fallback to RGB32 if NV12 was not accepted
+	// 2. Fallback to RGB32 if NV12 was not accepted
 	if ( !inputConfigured )
 	{
 		pMediaTypeIn = nullptr;
@@ -370,33 +342,18 @@ bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Code
 			pMediaTypeIn->SetGUID( GUID_MF_MT_MAJOR_TYPE, GUID_MFMediaType_Video );
 			pMediaTypeIn->SetGUID( GUID_MF_MT_SUBTYPE, GUID_MFVideoFormat_RGB32 );
 			pMediaTypeIn->SetUINT32( GUID_MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive );
-			setAttrSize( pMediaTypeIn, GUID_MF_MT_FRAME_SIZE, static_cast<UINT32>( m_width ), static_cast<UINT32>( m_height ) );
+			setAttrSize( pMediaTypeIn, GUID_MF_MT_FRAME_SIZE, static_cast<UINT32>( width ), static_cast<UINT32>( height ) );
 			setAttrRatio( pMediaTypeIn, GUID_MF_MT_FRAME_RATE, static_cast<UINT32>( m_fps ), 1 );
 			setAttrRatio( pMediaTypeIn, GUID_MF_MT_PIXEL_ASPECT_RATIO, 1, 1 );
-			pMediaTypeIn->SetUINT32( GUID_MF_MT_DEFAULT_STRIDE, static_cast<UINT32>( m_width * 4 ) );
 
-			IMFAttributes* pEncAttrs = nullptr;
-			hr = mf.fnCreateAttributes( &pEncAttrs, 2 );
-			if ( SUCCEEDED( hr ) && pEncAttrs )
-			{
-				pEncAttrs->SetUINT32( GUID_CODECAPI_AVEncCommonRateControlMode, 3 );
-				pEncAttrs->SetUINT32( GUID_CODECAPI_AVEncCommonQuality, static_cast<UINT32>( m_quality ) );
-			}
-
-			hr = m_sinkWriter->SetInputMediaType( m_streamIndex, pMediaTypeIn, pEncAttrs );
-			if ( FAILED( hr ) && pEncAttrs )
-			{
-				hr = m_sinkWriter->SetInputMediaType( m_streamIndex, pMediaTypeIn, NULL );
-			}
-			if ( pEncAttrs )
-			{
-				pEncAttrs->Release();
-			}
+			hr = m_sinkWriter->SetInputMediaType( m_streamIndex, pMediaTypeIn, NULL );
 			pMediaTypeIn->Release();
 
 			if ( SUCCEEDED( hr ) )
 			{
 				m_inputFormat = InputPixelFormat::RGB32;
+				m_width = width;
+				m_height = height;
 				inputConfigured = true;
 			}
 		}
@@ -404,8 +361,10 @@ bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Code
 
 	if ( !inputConfigured )
 	{
-		m_errorString = QStringLiteral( "SetInputMediaType (NV12 & RGB32) failed (0x%1)" )
-							.arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) );
+		m_errorString = QStringLiteral( "SetInputMediaType (NV12 & RGB32) failed (0x%1) for %2x%3" )
+							.arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) )
+							.arg( width )
+							.arg( height );
 		return false;
 	}
 
@@ -422,6 +381,8 @@ bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Code
 	Q_UNUSED( nativePath )
 	Q_UNUSED( codec )
 	Q_UNUSED( enableHardwareTransforms )
+	Q_UNUSED( width )
+	Q_UNUSED( height )
 	return false;
 #endif
 }
@@ -444,11 +405,16 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 		return false;
 	}
 
-	// Dimensions must be even for H.264 / HEVC / NV12
-	m_width = ( width + 1 ) & ~1;
-	m_height = ( height + 1 ) & ~1;
 	m_fps = fps;
 	m_quality = qBound( 1, quality, 100 );
+
+	// Priority 1: 16-aligned width, even height (macroblock boundary for Intel QuickSync & H.264)
+	const int alignedW = ( width + 15 ) & ~15;
+	const int alignedH = ( height + 1 ) & ~1;
+
+	// Priority 2: exact even dimensions
+	const int evenW = ( width + 1 ) & ~1;
+	const int evenH = ( height + 1 ) & ~1;
 
 	HRESULT hr = CoInitializeEx( NULL, COINIT_MULTITHREADED );
 	m_comInitialized = SUCCEEDED( hr ) || hr == S_FALSE;
@@ -482,27 +448,48 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 	QDir().mkpath( fileInfo.absolutePath() );
 	const QString nativePath = QDir::toNativeSeparators( filePath );
 
-	// Fallback strategy:
-	// 1. Preferred codec with GPU hardware acceleration
-	bool ok = createPipeline( nativePath, m_codec, true /* hardware */ );
-
-	// 2. Preferred codec with pure CPU software encoder
-	if ( !ok )
+	// Build list of resolutions to attempt:
+	// 1. Aligned to 16 width (e.g. 1366 -> 1376)
+	// 2. Exact even dimensions (if different from 16-aligned)
+	// 3. Fallback standard 1280x720 (720p - guaranteed universal support)
+	QList<QPair<int, int>> resolutionsToTry;
+	resolutionsToTry.append( qMakePair( alignedW, alignedH ) );
+	if ( evenW != alignedW || evenH != alignedH )
 	{
-		cleanupSinkWriter( nativePath );
-		ok = createPipeline( nativePath, m_codec, false /* software */ );
+		resolutionsToTry.append( qMakePair( evenW, evenH ) );
+	}
+	if ( alignedW != 1280 || alignedH != 720 )
+	{
+		resolutionsToTry.append( qMakePair( 1280, 720 ) );
 	}
 
-	// 3. If HEVC requested but unsupported by system, fall back to H.264 (hardware then software)
-	if ( !ok && m_codec == Codec::H265 )
+	bool ok = false;
+
+	for ( const auto& res : resolutionsToTry )
 	{
-		m_codec = Codec::H264;
+		const int testW = res.first;
+		const int testH = res.second;
+
+		// 1. Preferred codec with GPU hardware acceleration
 		cleanupSinkWriter( nativePath );
-		ok = createPipeline( nativePath, Codec::H264, true /* hardware */ );
-		if ( !ok )
+		ok = createPipeline( nativePath, m_codec, true /* hardware */, testW, testH );
+		if ( ok ) { break; }
+
+		// 2. Preferred codec with pure CPU software encoder
+		cleanupSinkWriter( nativePath );
+		ok = createPipeline( nativePath, m_codec, false /* software */, testW, testH );
+		if ( ok ) { break; }
+
+		// 3. If HEVC requested but unsupported by system, fall back to H.264 (hardware then software)
+		if ( m_codec == Codec::H265 )
 		{
 			cleanupSinkWriter( nativePath );
-			ok = createPipeline( nativePath, Codec::H264, false /* software */ );
+			ok = createPipeline( nativePath, Codec::H264, true /* hardware */, testW, testH );
+			if ( ok ) { m_codec = Codec::H264; break; }
+
+			cleanupSinkWriter( nativePath );
+			ok = createPipeline( nativePath, Codec::H264, false /* software */, testW, testH );
+			if ( ok ) { m_codec = Codec::H264; break; }
 		}
 	}
 
