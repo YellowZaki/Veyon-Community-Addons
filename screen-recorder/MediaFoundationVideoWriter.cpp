@@ -5,6 +5,7 @@
  */
 
 #include "MediaFoundationVideoWriter.h"
+#include "Logger.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -43,6 +44,9 @@ static const GUID GUID_MFVideoFormat_RGB32 =
 static const GUID GUID_MFVideoFormat_NV12 =
 	{ 0x3231564e, 0x0000, 0x0010, { 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71 } };
 
+static const GUID GUID_MFVideoFormat_YUY2 =
+	{ 0x32595559, 0x0000, 0x0010, { 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71 } };
+
 static const GUID GUID_MF_MT_AVG_BITRATE =
 	{ 0x20332624, 0xfb0d, 0x4d9e, { 0xbd, 0x0d, 0xcb, 0xf6, 0x78, 0x6c, 0x10, 0x2e } };
 
@@ -57,6 +61,18 @@ static const GUID GUID_MF_MT_PIXEL_ASPECT_RATIO =
 
 static const GUID GUID_MF_MT_INTERLACE_MODE =
 	{ 0xe2724bb8, 0xe676, 0x4806, { 0xb4, 0xb2, 0xa8, 0xd6, 0xef, 0x54, 0xd2, 0xf6 } };
+
+static const GUID GUID_MF_MT_ALL_SAMPLES_INDEPENDENT =
+	{ 0xc9173739, 0x5e56, 0x461c, { 0xb7, 0x13, 0x46, 0xfb, 0x99, 0x5c, 0xb9, 0x5f } };
+
+static const GUID GUID_MF_MT_DEFAULT_STRIDE =
+	{ 0x644b4e48, 0x1e02, 0x4516, { 0xb0, 0xeb, 0xc0, 0x1c, 0xa9, 0xd4, 0x9a, 0xc6 } };
+
+static const GUID GUID_MF_MT_FIXED_SIZE_SAMPLES =
+	{ 0xb8ebefaf, 0xb718, 0x4e04, { 0xb0, 0xa9, 0x11, 0x67, 0x75, 0xe3, 0x32, 0x1b } };
+
+static const GUID GUID_MF_MT_SAMPLE_SIZE =
+	{ 0xdad3ab78, 0x1990, 0x408b, { 0xbc, 0xe2, 0xeb, 0xa6, 0x73, 0xda, 0xcc, 0x10 } };
 
 static const GUID GUID_MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS =
 	{ 0xa634a91c, 0x822b, 0x41b9, { 0xa4, 0x94, 0x4d, 0xe4, 0x64, 0x36, 0x12, 0xb0 } };
@@ -221,6 +237,43 @@ void MediaFoundationVideoWriter::convertRgb32ToNv12( const QImage& img, unsigned
 	}
 }
 
+void MediaFoundationVideoWriter::convertRgb32ToYuy2( const QImage& img, unsigned char* pDst, int width, int height )
+{
+	for ( int y = 0; y < height; ++y )
+	{
+		const QRgb* srcRow = reinterpret_cast<const QRgb*>( img.constScanLine( y ) );
+		unsigned char* dstRow = pDst + ( y * width * 2 );
+
+		for ( int x = 0; x < width; x += 2 )
+		{
+			const QRgb p0 = srcRow[x];
+			const QRgb p1 = srcRow[x + 1];
+
+			const int r0 = qRed( p0 ), g0 = qGreen( p0 ), b0 = qBlue( p0 );
+			const int r1 = qRed( p1 ), g1 = qGreen( p1 ), b1 = qBlue( p1 );
+
+			// BT.601 Y
+			const int y0 = ( (  66 * r0 + 129 * g0 +  25 * b0 + 128 ) >> 8 ) + 16;
+			const int y1 = ( (  66 * r1 + 129 * g1 +  25 * b1 + 128 ) >> 8 ) + 16;
+
+			// Average RGB in 2x1 block
+			const int avgR = ( r0 + r1 + 1 ) >> 1;
+			const int avgG = ( g0 + g1 + 1 ) >> 1;
+			const int avgB = ( b0 + b1 + 1 ) >> 1;
+
+			// BT.601 UV
+			const int u = ( ( -38 * avgR - 74 * avgG + 112 * avgB + 128 ) >> 8 ) + 128;
+			const int v = ( ( 112 * avgR - 94 * avgG -  18 * avgB + 128 ) >> 8 ) + 128;
+
+			const int dstIdx = x * 2;
+			dstRow[dstIdx + 0] = static_cast<unsigned char>( qBound( 0, y0, 255 ) );
+			dstRow[dstIdx + 1] = static_cast<unsigned char>( qBound( 0, u, 255 ) );
+			dstRow[dstIdx + 2] = static_cast<unsigned char>( qBound( 0, y1, 255 ) );
+			dstRow[dstIdx + 3] = static_cast<unsigned char>( qBound( 0, v, 255 ) );
+		}
+	}
+}
+
 void MediaFoundationVideoWriter::cleanupSinkWriter( const QString& nativePath )
 {
 #ifdef Q_OS_WIN
@@ -229,9 +282,93 @@ void MediaFoundationVideoWriter::cleanupSinkWriter( const QString& nativePath )
 		m_sinkWriter->Release();
 		m_sinkWriter = nullptr;
 	}
-	QFile::remove( nativePath );
+	for ( int i = 0; i < 10 && QFile::exists( nativePath ); ++i )
+	{
+		if ( QFile::remove( nativePath ) )
+		{
+			break;
+		}
+		Sleep( 25 );
+	}
 #else
 	Q_UNUSED( nativePath )
+#endif
+}
+
+bool MediaFoundationVideoWriter::trySetInputType(
+	IMFSinkWriter* pWriter,
+	unsigned long streamIndex,
+	const GUID& subtype,
+	int width,
+	int height,
+	int fps,
+	bool fullAttributes,
+	long& outHr )
+{
+#ifdef Q_OS_WIN
+	auto& mf = MediaFoundationApi::instance();
+	IMFMediaType* pMediaTypeIn = nullptr;
+	HRESULT hr = mf.fnCreateMediaType( &pMediaTypeIn );
+	if ( FAILED( hr ) || !pMediaTypeIn )
+	{
+		outHr = hr;
+		return false;
+	}
+
+	pMediaTypeIn->SetGUID( GUID_MF_MT_MAJOR_TYPE, GUID_MFMediaType_Video );
+	pMediaTypeIn->SetGUID( GUID_MF_MT_SUBTYPE, subtype );
+	pMediaTypeIn->SetUINT32( GUID_MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive );
+	setAttrSize( pMediaTypeIn, GUID_MF_MT_FRAME_SIZE, static_cast<UINT32>( width ), static_cast<UINT32>( height ) );
+	setAttrRatio( pMediaTypeIn, GUID_MF_MT_FRAME_RATE, static_cast<UINT32>( fps ), 1 );
+	setAttrRatio( pMediaTypeIn, GUID_MF_MT_PIXEL_ASPECT_RATIO, 1, 1 );
+
+	if ( fullAttributes )
+	{
+		pMediaTypeIn->SetUINT32( GUID_MF_MT_ALL_SAMPLES_INDEPENDENT, TRUE );
+		pMediaTypeIn->SetUINT32( GUID_MF_MT_FIXED_SIZE_SAMPLES, TRUE );
+
+		UINT32 stride = 0;
+		UINT32 sampleSize = 0;
+		if ( subtype == GUID_MFVideoFormat_NV12 )
+		{
+			stride = static_cast<UINT32>( width );
+			sampleSize = static_cast<UINT32>( ( width * height * 3 ) / 2 );
+		}
+		else if ( subtype == GUID_MFVideoFormat_YUY2 )
+		{
+			stride = static_cast<UINT32>( width * 2 );
+			sampleSize = static_cast<UINT32>( width * height * 2 );
+		}
+		else if ( subtype == GUID_MFVideoFormat_RGB32 )
+		{
+			stride = static_cast<UINT32>( width * 4 );
+			sampleSize = static_cast<UINT32>( width * height * 4 );
+		}
+
+		if ( stride > 0 )
+		{
+			pMediaTypeIn->SetUINT32( GUID_MF_MT_DEFAULT_STRIDE, stride );
+		}
+		if ( sampleSize > 0 )
+		{
+			pMediaTypeIn->SetUINT32( GUID_MF_MT_SAMPLE_SIZE, sampleSize );
+		}
+	}
+
+	hr = pWriter->SetInputMediaType( streamIndex, pMediaTypeIn, NULL );
+	pMediaTypeIn->Release();
+	outHr = hr;
+	return SUCCEEDED( hr );
+#else
+	Q_UNUSED( pWriter )
+	Q_UNUSED( streamIndex )
+	Q_UNUSED( subtype )
+	Q_UNUSED( width )
+	Q_UNUSED( height )
+	Q_UNUSED( fps )
+	Q_UNUSED( fullAttributes )
+	outHr = E_FAIL;
+	return false;
 #endif
 }
 
@@ -244,10 +381,7 @@ bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Code
 	HRESULT hr = mf.fnCreateAttributes( &pAttributes, 2 );
 	if ( SUCCEEDED( hr ) && pAttributes )
 	{
-		if ( enableHardwareTransforms )
-		{
-			pAttributes->SetUINT32( GUID_MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, TRUE );
-		}
+		pAttributes->SetUINT32( GUID_MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, enableHardwareTransforms ? TRUE : FALSE );
 		pAttributes->SetUINT32( GUID_MF_SINK_WRITER_DISABLE_THROTTLING, TRUE );
 	}
 
@@ -274,6 +408,8 @@ bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Code
 	if ( FAILED( hr ) || !pMediaTypeOut )
 	{
 		m_errorString = QStringLiteral( "MFCreateMediaType for output failed" );
+		m_sinkWriter->Release();
+		m_sinkWriter = nullptr;
 		return false;
 	}
 
@@ -301,70 +437,64 @@ bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Code
 							.arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) )
 							.arg( width )
 							.arg( height );
+		m_sinkWriter->Release();
+		m_sinkWriter = nullptr;
 		return false;
 	}
 
-	// Try input media types: NV12 first (natively supported by Intel, AMD, NVIDIA, and Microsoft encoders)
-	// DO NOT set MF_MT_DEFAULT_STRIDE or encoder attributes: let SinkWriter negotiate automatically.
-	bool inputConfigured = false;
-
-	// 1. Try NV12
-	IMFMediaType* pMediaTypeIn = nullptr;
-	hr = mf.fnCreateMediaType( &pMediaTypeIn );
-	if ( SUCCEEDED( hr ) && pMediaTypeIn )
+	// Try input formats in priority order:
+	// 1. NV12 (full attributes) - standard hardware/software input
+	// 2. NV12 (minimal attributes)
+	// 3. YUY2 (full attributes) - widely compatible 4:2:2 input
+	// 4. YUY2 (minimal attributes)
+	// 5. RGB32 (full attributes) - direct RGB32 input via system color converter
+	// 6. RGB32 (minimal attributes)
+	struct InputCandidate
 	{
-		pMediaTypeIn->SetGUID( GUID_MF_MT_MAJOR_TYPE, GUID_MFMediaType_Video );
-		pMediaTypeIn->SetGUID( GUID_MF_MT_SUBTYPE, GUID_MFVideoFormat_NV12 );
-		pMediaTypeIn->SetUINT32( GUID_MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive );
-		setAttrSize( pMediaTypeIn, GUID_MF_MT_FRAME_SIZE, static_cast<UINT32>( width ), static_cast<UINT32>( height ) );
-		setAttrRatio( pMediaTypeIn, GUID_MF_MT_FRAME_RATE, static_cast<UINT32>( m_fps ), 1 );
-		setAttrRatio( pMediaTypeIn, GUID_MF_MT_PIXEL_ASPECT_RATIO, 1, 1 );
+		GUID subtype;
+		InputPixelFormat format;
+		bool fullAttributes;
+		const char* name;
+	};
 
-		hr = m_sinkWriter->SetInputMediaType( m_streamIndex, pMediaTypeIn, NULL );
-		pMediaTypeIn->Release();
+	const InputCandidate candidates[] = {
+		{ GUID_MFVideoFormat_NV12,  InputPixelFormat::NV12,  true,  "NV12 (full)" },
+		{ GUID_MFVideoFormat_NV12,  InputPixelFormat::NV12,  false, "NV12 (minimal)" },
+		{ GUID_MFVideoFormat_YUY2,  InputPixelFormat::YUY2,  true,  "YUY2 (full)" },
+		{ GUID_MFVideoFormat_YUY2,  InputPixelFormat::YUY2,  false, "YUY2 (minimal)" },
+		{ GUID_MFVideoFormat_RGB32, InputPixelFormat::RGB32, true,  "RGB32 (full)" },
+		{ GUID_MFVideoFormat_RGB32, InputPixelFormat::RGB32, false, "RGB32 (minimal)" }
+	};
 
-		if ( SUCCEEDED( hr ) )
+	bool inputConfigured = false;
+	long lastInputHr = S_OK;
+
+	for ( const auto& cand : candidates )
+	{
+		long candHr = S_OK;
+		if ( trySetInputType( m_sinkWriter, m_streamIndex, cand.subtype, width, height, m_fps, cand.fullAttributes, candHr ) )
 		{
-			m_inputFormat = InputPixelFormat::NV12;
+			m_inputFormat = cand.format;
 			m_width = width;
 			m_height = height;
 			inputConfigured = true;
+			vDebug() << "MediaFoundationVideoWriter: accepted input format" << cand.name
+			         << ( enableHardwareTransforms ? "with HW" : "with SW" )
+			         << "for resolution" << width << "x" << height;
+			break;
 		}
-	}
-
-	// 2. Fallback to RGB32 if NV12 was not accepted
-	if ( !inputConfigured )
-	{
-		pMediaTypeIn = nullptr;
-		hr = mf.fnCreateMediaType( &pMediaTypeIn );
-		if ( SUCCEEDED( hr ) && pMediaTypeIn )
-		{
-			pMediaTypeIn->SetGUID( GUID_MF_MT_MAJOR_TYPE, GUID_MFMediaType_Video );
-			pMediaTypeIn->SetGUID( GUID_MF_MT_SUBTYPE, GUID_MFVideoFormat_RGB32 );
-			pMediaTypeIn->SetUINT32( GUID_MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive );
-			setAttrSize( pMediaTypeIn, GUID_MF_MT_FRAME_SIZE, static_cast<UINT32>( width ), static_cast<UINT32>( height ) );
-			setAttrRatio( pMediaTypeIn, GUID_MF_MT_FRAME_RATE, static_cast<UINT32>( m_fps ), 1 );
-			setAttrRatio( pMediaTypeIn, GUID_MF_MT_PIXEL_ASPECT_RATIO, 1, 1 );
-
-			hr = m_sinkWriter->SetInputMediaType( m_streamIndex, pMediaTypeIn, NULL );
-			pMediaTypeIn->Release();
-
-			if ( SUCCEEDED( hr ) )
-			{
-				m_inputFormat = InputPixelFormat::RGB32;
-				m_width = width;
-				m_height = height;
-				inputConfigured = true;
-			}
-		}
+		lastInputHr = candHr;
 	}
 
 	if ( !inputConfigured )
 	{
-		m_errorString = QStringLiteral( "SetInputMediaType (NV12 & RGB32) failed (0x%1) for %2x%3" )
-							.arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) )
+		m_errorString = QStringLiteral( "SetInputMediaType failed (0x%1) for %2x%3 (%4)" )
+							.arg( static_cast<quint32>( lastInputHr ), 8, 16, QLatin1Char( '0' ) )
 							.arg( width )
-							.arg( height );
+							.arg( height )
+							.arg( enableHardwareTransforms ? QStringLiteral( "HW" ) : QStringLiteral( "SW" ) );
+		m_sinkWriter->Release();
+		m_sinkWriter = nullptr;
 		return false;
 	}
 
@@ -373,6 +503,8 @@ bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Code
 	{
 		m_errorString = QStringLiteral( "BeginWriting failed (0x%1)" )
 							.arg( static_cast<quint32>( hr ), 8, 16, QLatin1Char( '0' ) );
+		m_sinkWriter->Release();
+		m_sinkWriter = nullptr;
 		return false;
 	}
 
@@ -449,7 +581,7 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 	const QString nativePath = QDir::toNativeSeparators( filePath );
 
 	// Build list of resolutions to attempt:
-	// 1. Aligned to 16 width (e.g. 1366 -> 1376)
+	// 1. Aligned to 16 width (e.g. 1366 -> 1376, 1920 -> 1920)
 	// 2. Exact even dimensions (if different from 16-aligned)
 	// 3. Fallback standard 1280x720 (720p - guaranteed universal support)
 	QList<QPair<int, int>> resolutionsToTry;
@@ -473,23 +605,49 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 		// 1. Preferred codec with GPU hardware acceleration
 		cleanupSinkWriter( nativePath );
 		ok = createPipeline( nativePath, m_codec, true /* hardware */, testW, testH );
-		if ( ok ) { break; }
+		if ( ok )
+		{
+			vDebug() << "MediaFoundationVideoWriter: Pipeline created successfully with HW at"
+			         << testW << "x" << testH;
+			break;
+		}
+		vDebug() << "MediaFoundationVideoWriter: HW failed at" << testW << "x" << testH
+		         << ":" << m_errorString << "- falling back to CPU/SW";
 
 		// 2. Preferred codec with pure CPU software encoder
 		cleanupSinkWriter( nativePath );
 		ok = createPipeline( nativePath, m_codec, false /* software */, testW, testH );
-		if ( ok ) { break; }
+		if ( ok )
+		{
+			vDebug() << "MediaFoundationVideoWriter: Pipeline created successfully with SW at"
+			         << testW << "x" << testH;
+			break;
+		}
+		vDebug() << "MediaFoundationVideoWriter: SW failed at" << testW << "x" << testH
+		         << ":" << m_errorString;
 
 		// 3. If HEVC requested but unsupported by system, fall back to H.264 (hardware then software)
 		if ( m_codec == Codec::H265 )
 		{
 			cleanupSinkWriter( nativePath );
 			ok = createPipeline( nativePath, Codec::H264, true /* hardware */, testW, testH );
-			if ( ok ) { m_codec = Codec::H264; break; }
+			if ( ok )
+			{
+				m_codec = Codec::H264;
+				vDebug() << "MediaFoundationVideoWriter: Pipeline created with H.264 HW fallback at"
+				         << testW << "x" << testH;
+				break;
+			}
 
 			cleanupSinkWriter( nativePath );
 			ok = createPipeline( nativePath, Codec::H264, false /* software */, testW, testH );
-			if ( ok ) { m_codec = Codec::H264; break; }
+			if ( ok )
+			{
+				m_codec = Codec::H264;
+				vDebug() << "MediaFoundationVideoWriter: Pipeline created with H.264 SW fallback at"
+				         << testW << "x" << testH;
+				break;
+			}
 		}
 	}
 
@@ -556,6 +714,25 @@ bool MediaFoundationVideoWriter::writeFrame( const QImage& frame, qint64 timesta
 		if ( SUCCEEDED( hr ) && pData )
 		{
 			convertRgb32ToNv12( img, pData, m_width, m_height );
+			pBuffer->Unlock();
+			pBuffer->SetCurrentLength( cbBuffer );
+		}
+	}
+	else if ( m_inputFormat == InputPixelFormat::YUY2 )
+	{
+		const DWORD cbBuffer = static_cast<DWORD>( m_width * m_height * 2 );
+		hr = mf.fnCreateMemoryBuffer( cbBuffer, &pBuffer );
+		if ( FAILED( hr ) || !pBuffer )
+		{
+			m_errorString = QStringLiteral( "MFCreateMemoryBuffer failed" );
+			return false;
+		}
+
+		BYTE* pData = nullptr;
+		hr = pBuffer->Lock( &pData, NULL, NULL );
+		if ( SUCCEEDED( hr ) && pData )
+		{
+			convertRgb32ToYuy2( img, pData, m_width, m_height );
 			pBuffer->Unlock();
 			pBuffer->SetCurrentLength( cbBuffer );
 		}
