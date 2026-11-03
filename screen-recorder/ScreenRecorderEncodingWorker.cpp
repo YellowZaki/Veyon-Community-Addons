@@ -6,7 +6,6 @@
 
 #include "ScreenRecorderEncodingWorker.h"
 #include "MediaFoundationVideoWriter.h"
-#include "AviVideoWriter.h"
 #include "Logger.h"
 
 #include <QPainter>
@@ -142,31 +141,6 @@ bool ScreenRecorderEncodingWorker::initializeWriter( const QImage& firstFrame )
 	vDebug() << "initializeWriter starting for" << m_options.computerName
 			 << "frame resolution:" << width << "x" << height;
 
-	if ( m_options.format == Format::MotionJpegAvi )
-	{
-		QString aviPath = m_actualFilePath;
-		if ( aviPath.endsWith( QStringLiteral( ".mp4" ), Qt::CaseInsensitive ) )
-		{
-			aviPath.chop( 4 );
-			aviPath.append( QStringLiteral( ".avi" ) );
-		}
-
-		auto aviWriter = new AviVideoWriter();
-		if ( aviWriter->open( aviPath, width, height, m_options.fps, m_options.quality ) )
-		{
-			m_actualFilePath = aviPath;
-			m_writer.reset( aviWriter );
-			vDebug() << "Initialized AviVideoWriter for" << m_options.computerName << ":" << m_actualFilePath;
-			return true;
-		}
-
-		const QString err = aviWriter->errorString();
-		vCritical() << "AviVideoWriter failed for" << m_options.computerName << ":" << err;
-		delete aviWriter;
-		Q_EMIT recordingError( err );
-		return false;
-	}
-
 	if ( MediaFoundationVideoWriter::isSupported() )
 	{
 		const auto codec = ( m_options.format == Format::HevcMp4 )
@@ -185,38 +159,15 @@ bool ScreenRecorderEncodingWorker::initializeWriter( const QImage& firstFrame )
 		}
 
 		const QString err = mfWriter->errorString();
-		vWarning() << "MediaFoundationVideoWriter failed for" << m_options.computerName
-				   << "(" << width << "x" << height << "):" << err
-				   << "- Falling back to built-in AVI (Motion-JPEG) writer!";
+		vCritical() << "MediaFoundationVideoWriter failed for" << m_options.computerName
+					<< "(" << width << "x" << height << "):" << err;
 		delete mfWriter;
-	}
-	else
-	{
-		vWarning() << "Media Foundation not supported on this platform - Falling back to built-in AVI (Motion-JPEG) writer!";
+		Q_EMIT recordingError( err );
+		return false;
 	}
 
-	// Automatic fallback to built-in AviVideoWriter (no external dependencies, works everywhere)
-	QString aviPath = m_actualFilePath;
-	if ( aviPath.endsWith( QStringLiteral( ".mp4" ), Qt::CaseInsensitive ) )
-	{
-		aviPath.chop( 4 );
-		aviPath.append( QStringLiteral( ".avi" ) );
-	}
-
-	auto aviWriter = new AviVideoWriter();
-	if ( aviWriter->open( aviPath, width, height, m_options.fps, m_options.quality ) )
-	{
-		m_actualFilePath = aviPath;
-		m_writer.reset( aviWriter );
-		vWarning() << "Successfully initialized fallback AviVideoWriter for" << m_options.computerName
-				   << ":" << m_actualFilePath;
-		return true;
-	}
-
-	const QString aviErr = aviWriter->errorString();
-	vCritical() << "Fallback AviVideoWriter also failed for" << m_options.computerName << ":" << aviErr;
-	delete aviWriter;
-	Q_EMIT recordingError( aviErr );
+	vCritical() << "Media Foundation is not supported on this platform";
+	Q_EMIT recordingError( QStringLiteral( "Media Foundation not supported" ) );
 	return false;
 }
 

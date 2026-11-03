@@ -145,10 +145,6 @@
         <translation>MP4 de alta eficiencia (H.265 / HEVC)</translation>
     </message>
     <message>
-        <source>Motion JPEG (AVI)</source>
-        <translation>Motion JPEG (AVI)</translation>
-    </message>
-    <message>
         <source>Video quality (CRF):</source>
         <translation>Calidad de video (CRF):</translation>
     </message>

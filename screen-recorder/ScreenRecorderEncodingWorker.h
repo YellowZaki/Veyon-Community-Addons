@@ -24,8 +24,7 @@ public:
 	enum class Format
 	{
 		StandardMp4 = 0,
-		HevcMp4 = 1,
-		MotionJpegAvi = 2
+		HevcMp4 = 1
 	};
 	Q_ENUM( Format )
 

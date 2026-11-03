@@ -96,7 +96,7 @@ Abre **Veyon Configurator** -> pestaña **Complementos / Add-ons** -> **Grabador
 | **Usar resolución fija** | Desactivado (`false`) | Escala todos los videos a una resolución establecida (ej. 1920x1080). |
 | **Mantener relación de aspecto** | Activado (`true`) | Añade bandas negras simétricas si la pantalla del alumno difiere de la resolución elegida. |
 | **Cuadros por segundo (FPS)** | `15` fps | Frecuencia de muestreo de fotogramas (1 a 60 fps). |
-| **Formato de codificación** | `MP4 (H.264)` | Formato del archivo (MP4 vía Media Foundation o AVI Motion-JPEG). |
+| **Formato de codificación** | `MP4 (H.264)` | Formato del archivo (MP4 H.264 o H.265 vía Media Foundation). |
 | **Tasa de bits (Bitrate)** | `2500` kbps | Calidad y compresión del video H.264. |
 | **Notificar a los alumnos** | Desactivado (`false`) | Muestra un aviso en el escritorio del alumno informándole de la grabación. |
 

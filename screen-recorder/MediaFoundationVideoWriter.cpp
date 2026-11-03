@@ -80,6 +80,9 @@ static const GUID GUID_MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS =
 static const GUID GUID_MF_SINK_WRITER_DISABLE_THROTTLING =
 	{ 0x08b845d8, 0x2b74, 0x4afe, { 0x9d, 0x53, 0xbe, 0x16, 0xd2, 0xd5, 0xae, 0x4f } };
 
+static const GUID GUID_MF_MT_MPEG2_PROFILE =
+	{ 0xad76a008, 0x4725, 0x42cb, { 0xbb, 0x04, 0x3a, 0xbe, 0xb5, 0xb5, 0x52, 0xb5 } };
+
 // Dynamic loader for Media Foundation functions
 class MediaFoundationApi
 {
@@ -91,7 +94,6 @@ public:
 	typedef HRESULT (WINAPI *MFCreateMemoryBuffer_t)(DWORD, IMFMediaBuffer**);
 	typedef HRESULT (WINAPI *MFCreateSample_t)(IMFSample**);
 	typedef HRESULT (WINAPI *MFCreateSinkWriterFromURL_t)(LPCWSTR, IMFByteStream*, IMFAttributes*, IMFSinkWriter**);
-	typedef HRESULT (WINAPI *MFTRegisterLocalByCLSID_t)(REFCLSID, REFGUID, LPCWSTR, UINT32, UINT32, const void*, UINT32, const void*);
 
 	static MediaFoundationApi& instance()
 	{
@@ -108,7 +110,6 @@ public:
 	MFCreateMemoryBuffer_t fnCreateMemoryBuffer{nullptr};
 	MFCreateSample_t fnCreateSample{nullptr};
 	MFCreateSinkWriterFromURL_t fnCreateSinkWriterFromURL{nullptr};
-	MFTRegisterLocalByCLSID_t fnMFTRegisterLocalByCLSID{nullptr};
 
 private:
 	MediaFoundationApi()
@@ -125,7 +126,6 @@ private:
 			fnCreateMemoryBuffer = reinterpret_cast<MFCreateMemoryBuffer_t>( GetProcAddress( m_hMfplat, "MFCreateMemoryBuffer" ) );
 			fnCreateSample = reinterpret_cast<MFCreateSample_t>( GetProcAddress( m_hMfplat, "MFCreateSample" ) );
 			fnCreateSinkWriterFromURL = reinterpret_cast<MFCreateSinkWriterFromURL_t>( GetProcAddress( m_hMfReadWrite, "MFCreateSinkWriterFromURL" ) );
-			fnMFTRegisterLocalByCLSID = reinterpret_cast<MFTRegisterLocalByCLSID_t>( GetProcAddress( m_hMfplat, "MFTRegisterLocalByCLSID" ) );
 
 			m_valid = fnStartup && fnShutdown && fnCreateAttributes && fnCreateMediaType &&
 					  fnCreateMemoryBuffer && fnCreateSample && fnCreateSinkWriterFromURL;
@@ -427,7 +427,26 @@ bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Code
 	setAttrRatio( pMediaTypeOut, GUID_MF_MT_FRAME_RATE, static_cast<UINT32>( m_fps ), 1 );
 	setAttrRatio( pMediaTypeOut, GUID_MF_MT_PIXEL_ASPECT_RATIO, 1, 1 );
 
+	if ( codec == Codec::H264 )
+	{
+		// Set Baseline profile (66) for universal hardware & software encoder compatibility
+		pMediaTypeOut->SetUINT32( GUID_MF_MT_MPEG2_PROFILE, 66 );
+	}
+
 	hr = m_sinkWriter->AddStream( pMediaTypeOut, &m_streamIndex );
+	if ( FAILED( hr ) && codec == Codec::H264 )
+	{
+		// Fallback to Main profile (77) if Baseline is not accepted
+		pMediaTypeOut->SetUINT32( GUID_MF_MT_MPEG2_PROFILE, 77 );
+		hr = m_sinkWriter->AddStream( pMediaTypeOut, &m_streamIndex );
+		if ( FAILED( hr ) )
+		{
+			// Fallback to unspecified profile
+			pMediaTypeOut->DeleteItem( GUID_MF_MT_MPEG2_PROFILE );
+			hr = m_sinkWriter->AddStream( pMediaTypeOut, &m_streamIndex );
+		}
+	}
+
 	pMediaTypeOut->Release();
 	if ( FAILED( hr ) )
 	{
@@ -443,12 +462,12 @@ bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Code
 	}
 
 	// Try input formats in priority order:
-	// 1. NV12 (full attributes) - standard hardware/software input
-	// 2. NV12 (minimal attributes)
-	// 3. YUY2 (full attributes) - widely compatible 4:2:2 input
-	// 4. YUY2 (minimal attributes)
-	// 5. RGB32 (full attributes) - direct RGB32 input via system color converter
-	// 6. RGB32 (minimal attributes)
+	// 1. NV12 (minimal attributes) - standard hardware/software input
+	// 2. NV12 (full attributes)
+	// 3. YUY2 (minimal attributes) - widely compatible 4:2:2 input
+	// 4. YUY2 (full attributes)
+	// 5. RGB32 (minimal attributes) - direct RGB32 input via system color converter
+	// 6. RGB32 (full attributes)
 	struct InputCandidate
 	{
 		GUID subtype;
@@ -458,12 +477,12 @@ bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Code
 	};
 
 	const InputCandidate candidates[] = {
-		{ GUID_MFVideoFormat_NV12,  InputPixelFormat::NV12,  true,  "NV12 (full)" },
 		{ GUID_MFVideoFormat_NV12,  InputPixelFormat::NV12,  false, "NV12 (minimal)" },
-		{ GUID_MFVideoFormat_YUY2,  InputPixelFormat::YUY2,  true,  "YUY2 (full)" },
+		{ GUID_MFVideoFormat_NV12,  InputPixelFormat::NV12,  true,  "NV12 (full)" },
 		{ GUID_MFVideoFormat_YUY2,  InputPixelFormat::YUY2,  false, "YUY2 (minimal)" },
-		{ GUID_MFVideoFormat_RGB32, InputPixelFormat::RGB32, true,  "RGB32 (full)" },
-		{ GUID_MFVideoFormat_RGB32, InputPixelFormat::RGB32, false, "RGB32 (minimal)" }
+		{ GUID_MFVideoFormat_YUY2,  InputPixelFormat::YUY2,  true,  "YUY2 (full)" },
+		{ GUID_MFVideoFormat_RGB32, InputPixelFormat::RGB32, false, "RGB32 (minimal)" },
+		{ GUID_MFVideoFormat_RGB32, InputPixelFormat::RGB32, true,  "RGB32 (full)" }
 	};
 
 	bool inputConfigured = false;
@@ -484,6 +503,9 @@ bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Code
 			break;
 		}
 		lastInputHr = candHr;
+		vDebug() << "MediaFoundationVideoWriter: candidate" << cand.name
+		         << ( enableHardwareTransforms ? "(HW)" : "(SW)" )
+		         << "failed with hr =" << QString::asprintf( "0x%08lx", static_cast<unsigned long>( candHr ) );
 	}
 
 	if ( !inputConfigured )
@@ -568,22 +590,6 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 	else
 	{
 		vWarning() << "MediaFoundationVideoWriter: mfh264enc.dll not found in system (Windows N / missing Media Feature Pack)";
-	}
-
-	if ( mf.fnMFTRegisterLocalByCLSID )
-	{
-		static const GUID GUID_CColorConvertDMO =
-			{ 0x98230571, 0x0087, 0x4204, { 0x97, 0xba, 0x08, 0x3c, 0x53, 0x36, 0x30, 0x7b } };
-		static const GUID GUID_MFT_CATEGORY_VIDEO_PROCESSOR =
-			{ 0xf79eac7d, 0xe545, 0x4387, { 0xbd, 0xee, 0xd6, 0x47, 0xd7, 0xbd, 0xe4, 0x2a } };
-		static const UINT32 MFT_ENUM_FLAG_SYNCMFT = 0x00000001;
-
-		mf.fnMFTRegisterLocalByCLSID(
-			GUID_CColorConvertDMO,
-			GUID_MFT_CATEGORY_VIDEO_PROCESSOR,
-			L"",
-			MFT_ENUM_FLAG_SYNCMFT,
-			0, NULL, 0, NULL );
 	}
 
 	QFileInfo fileInfo( filePath );
