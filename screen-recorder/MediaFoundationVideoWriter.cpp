@@ -560,6 +560,16 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 	}
 	m_mfStarted = true;
 
+	HMODULE hH264 = LoadLibraryW( L"mfh264enc.dll" );
+	if ( hH264 )
+	{
+		FreeLibrary( hH264 );
+	}
+	else
+	{
+		vWarning() << "MediaFoundationVideoWriter: mfh264enc.dll not found in system (Windows N / missing Media Feature Pack)";
+	}
+
 	if ( mf.fnMFTRegisterLocalByCLSID )
 	{
 		static const GUID GUID_CColorConvertDMO =

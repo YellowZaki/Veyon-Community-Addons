@@ -185,7 +185,10 @@ bool ScreenRecorderFeaturePlugin::startRecording( VeyonMasterInterface* master,
 	}
 
 	const QString baseDir = ScreenRecorderUtil::resolvedOutputDirectory( m_configuration );
-	const QString extension = QStringLiteral( ".mp4" );
+	const auto format = static_cast<ScreenRecorderEncodingWorker::Format>( m_configuration.format() );
+	const QString extension = ( format == ScreenRecorderEncodingWorker::Format::MotionJpegAvi )
+		? QStringLiteral( ".avi" )
+		: QStringLiteral( ".mp4" );
 
 	const int fps = qBound( 1, m_configuration.framesPerSecond(), 60 );
 	const int intervalMs = 1000 / fps;

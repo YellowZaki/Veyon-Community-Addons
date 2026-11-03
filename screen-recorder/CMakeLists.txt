@@ -19,6 +19,8 @@ set(SOURCES
 	ScreenRecorderEncodingWorker.cpp
 	ScreenRecorderEncodingWorker.h
 	VideoWriter.h
+	AviVideoWriter.cpp
+	AviVideoWriter.h
 	MediaFoundationVideoWriter.cpp
 	MediaFoundationVideoWriter.h
 	screenrecorder.qrc
