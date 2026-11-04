@@ -25,7 +25,8 @@ set(SOURCES
 	MediaFoundationVideoWriter.h
 	SoftwareH264VideoWriter.cpp
 	SoftwareH264VideoWriter.h
-	minih264_mp4.c
+	minih264_impl.c
+	minimp4_impl.c
 	screenrecorder.qrc
 )
 
