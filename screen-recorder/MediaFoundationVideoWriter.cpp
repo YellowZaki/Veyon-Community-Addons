@@ -627,22 +627,10 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 			         << testW << "x" << testH;
 			break;
 		}
-		vDebug() << "MediaFoundationVideoWriter: HW failed at" << testW << "x" << testH
-		         << ":" << m_errorString << "- falling back to CPU/SW";
+		vWarning() << "MediaFoundationVideoWriter: HW failed at" << testW << "x" << testH
+		           << ":" << m_errorString;
 
-		// 2. Preferred codec with pure CPU software encoder
-		cleanupSinkWriter( nativePath );
-		ok = createPipeline( nativePath, m_codec, false /* software */, testW, testH );
-		if ( ok )
-		{
-			vDebug() << "MediaFoundationVideoWriter: Pipeline created successfully with SW at"
-			         << testW << "x" << testH;
-			break;
-		}
-		vDebug() << "MediaFoundationVideoWriter: SW failed at" << testW << "x" << testH
-		         << ":" << m_errorString;
-
-		// 3. If HEVC requested but unsupported by system, fall back to H.264 (hardware then software)
+		// 2. If HEVC requested but unsupported by system GPU, fall back to H.264 HW
 		if ( m_codec == Codec::H265 )
 		{
 			cleanupSinkWriter( nativePath );
@@ -654,16 +642,8 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 				         << testW << "x" << testH;
 				break;
 			}
-
-			cleanupSinkWriter( nativePath );
-			ok = createPipeline( nativePath, Codec::H264, false /* software */, testW, testH );
-			if ( ok )
-			{
-				m_codec = Codec::H264;
-				vDebug() << "MediaFoundationVideoWriter: Pipeline created with H.264 SW fallback at"
-				         << testW << "x" << testH;
-				break;
-			}
+			vWarning() << "MediaFoundationVideoWriter: H.264 HW fallback failed at" << testW << "x" << testH
+			           << ":" << m_errorString;
 		}
 	}
 

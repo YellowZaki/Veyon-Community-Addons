@@ -6,6 +6,7 @@
 
 #include "ScreenRecorderEncodingWorker.h"
 #include "MediaFoundationVideoWriter.h"
+#include "SoftwareH264VideoWriter.h"
 #include "Logger.h"
 
 #include <QPainter>
@@ -101,8 +102,8 @@ QImage ScreenRecorderEncodingWorker::processFrameDimensions( const QImage& frame
 {
 	if ( m_options.useFixedResolution )
 	{
-		const int targetW = ( m_options.resolutionWidth + 1 ) & ~1;
-		const int targetH = ( m_options.resolutionHeight + 1 ) & ~1;
+		const int targetW = ( m_options.resolutionWidth + 15 ) & ~15;
+		const int targetH = ( m_options.resolutionHeight + 15 ) & ~15;
 
 		if ( m_options.keepAspectRatio )
 		{
@@ -121,13 +122,13 @@ QImage ScreenRecorderEncodingWorker::processFrameDimensions( const QImage& frame
 		return frame.scaled( targetW, targetH, Qt::IgnoreAspectRatio, Qt::SmoothTransformation );
 	}
 
-	// Dynamic resolution: ensure macroblock-aligned width (divisible by 16) and even height (divisible by 2)
-	const int evenW = ( frame.width() + 15 ) & ~15;
-	const int evenH = ( frame.height() + 1 ) & ~1;
+	// Dynamic resolution: ensure macroblock-aligned width and height (divisible by 16)
+	const int alignedW = ( frame.width() + 15 ) & ~15;
+	const int alignedH = ( frame.height() + 15 ) & ~15;
 
-	if ( frame.width() != evenW || frame.height() != evenH )
+	if ( frame.width() != alignedW || frame.height() != alignedH )
 	{
-		return frame.scaled( evenW, evenH, Qt::IgnoreAspectRatio, Qt::SmoothTransformation );
+		return frame.scaled( alignedW, alignedH, Qt::IgnoreAspectRatio, Qt::SmoothTransformation );
 	}
 
 	return frame;
@@ -141,6 +142,7 @@ bool ScreenRecorderEncodingWorker::initializeWriter( const QImage& firstFrame )
 	vDebug() << "initializeWriter starting for" << m_options.computerName
 			 << "frame resolution:" << width << "x" << height;
 
+	// 1. First attempt: Media Foundation GPU hardware accelerated writer (fastest if GPU encoder is available)
 	if ( MediaFoundationVideoWriter::isSupported() )
 	{
 		const auto codec = ( m_options.format == Format::HevcMp4 )
@@ -151,23 +153,37 @@ bool ScreenRecorderEncodingWorker::initializeWriter( const QImage& firstFrame )
 		if ( mfWriter->open( m_actualFilePath, width, height, m_options.fps, m_options.quality ) )
 		{
 			m_writer.reset( mfWriter );
-			vDebug() << "Initialized MediaFoundationVideoWriter ("
-					 << ( m_options.format == Format::HevcMp4 ? "HEVC/H.265" : "H.264" )
-					 << ") for" << m_options.computerName << ":" << m_actualFilePath
-					 << "quality:" << m_options.quality;
+			vInfo() << "Initialized MediaFoundationVideoWriter ("
+					<< ( m_options.format == Format::HevcMp4 ? "HEVC/H.265" : "H.264" )
+					<< ") for" << m_options.computerName << ":" << m_actualFilePath
+					<< "quality:" << m_options.quality;
 			return true;
 		}
 
 		const QString err = mfWriter->errorString();
-		vCritical() << "MediaFoundationVideoWriter failed for" << m_options.computerName
-					<< "(" << width << "x" << height << "):" << err;
+		vWarning() << "MediaFoundationVideoWriter failed for" << m_options.computerName
+				   << "(" << width << "x" << height << "):" << err
+				   << "- falling back to built-in Software H.264 MP4 encoder";
 		delete mfWriter;
-		Q_EMIT recordingError( err );
-		return false;
 	}
 
-	vCritical() << "Media Foundation is not supported on this platform";
-	Q_EMIT recordingError( QStringLiteral( "Media Foundation not supported" ) );
+	// 2. Guaranteed fallback: Built-in Software H.264 MP4 writer
+	// Guaranteed to record valid, playable H.264 MP4 on ANY PC without dedicated GPU (classroom PCs, VMs, etc.)
+	auto swWriter = new SoftwareH264VideoWriter();
+	if ( swWriter->open( m_actualFilePath, width, height, m_options.fps, m_options.quality ) )
+	{
+		m_writer.reset( swWriter );
+		vInfo() << "Initialized SoftwareH264VideoWriter (H.264 MP4) for"
+				<< m_options.computerName << ":" << m_actualFilePath
+				<< "quality:" << m_options.quality;
+		return true;
+	}
+
+	const QString swErr = swWriter->errorString();
+	vCritical() << "SoftwareH264VideoWriter failed for" << m_options.computerName
+				<< "(" << width << "x" << height << "):" << swErr;
+	delete swWriter;
+	Q_EMIT recordingError( swErr );
 	return false;
 }
 

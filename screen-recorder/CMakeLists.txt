@@ -4,10 +4,12 @@
 #
 
 cmake_minimum_required(VERSION 3.18)
-project(screenrecorder LANGUAGES CXX)
+project(screenrecorder LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
 
 set(SOURCES
 	ScreenRecorderFeaturePlugin.cpp
@@ -21,6 +23,9 @@ set(SOURCES
 	VideoWriter.h
 	MediaFoundationVideoWriter.cpp
 	MediaFoundationVideoWriter.h
+	SoftwareH264VideoWriter.cpp
+	SoftwareH264VideoWriter.h
+	minih264_mp4.c
 	screenrecorder.qrc
 )
 
@@ -29,6 +34,9 @@ if(COMMAND build_veyon_plugin)
 	build_veyon_plugin(screenrecorder
 		NAME ScreenRecorder
 		SOURCES ${SOURCES}
+	)
+	target_include_directories(screenrecorder PRIVATE
+		${CMAKE_CURRENT_SOURCE_DIR}
 	)
 	if(WIN32)
 		target_link_libraries(screenrecorder PRIVATE ole32 oleaut32 uuid)
@@ -58,6 +66,7 @@ else()
 	)
 
 	target_include_directories(screenrecorder PRIVATE
+		${CMAKE_CURRENT_SOURCE_DIR}
 		${CMAKE_CURRENT_SOURCE_DIR}/compat
 	)
 
