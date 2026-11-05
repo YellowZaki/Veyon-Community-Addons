@@ -372,7 +372,7 @@ bool MediaFoundationVideoWriter::trySetInputType(
 #endif
 }
 
-bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Codec codec, bool enableHardwareTransforms, int width, int height )
+bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Codec codec, int width, int height )
 {
 #ifdef Q_OS_WIN
 	auto& mf = MediaFoundationApi::instance();
@@ -381,7 +381,7 @@ bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Code
 	HRESULT hr = mf.fnCreateAttributes( &pAttributes, 2 );
 	if ( SUCCEEDED( hr ) && pAttributes )
 	{
-		pAttributes->SetUINT32( GUID_MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, enableHardwareTransforms ? TRUE : FALSE );
+		pAttributes->SetUINT32( GUID_MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, TRUE );
 		pAttributes->SetUINT32( GUID_MF_SINK_WRITER_DISABLE_THROTTLING, TRUE );
 	}
 
@@ -477,12 +477,10 @@ bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Code
 	};
 
 	const InputCandidate candidates[] = {
-		{ GUID_MFVideoFormat_NV12,  InputPixelFormat::NV12,  false, "NV12 (minimal)" },
+		{ GUID_MFVideoFormat_NV12,  InputPixelFormat::NV12,  false, "NV12" },
 		{ GUID_MFVideoFormat_NV12,  InputPixelFormat::NV12,  true,  "NV12 (full)" },
-		{ GUID_MFVideoFormat_YUY2,  InputPixelFormat::YUY2,  false, "YUY2 (minimal)" },
-		{ GUID_MFVideoFormat_YUY2,  InputPixelFormat::YUY2,  true,  "YUY2 (full)" },
-		{ GUID_MFVideoFormat_RGB32, InputPixelFormat::RGB32, false, "RGB32 (minimal)" },
-		{ GUID_MFVideoFormat_RGB32, InputPixelFormat::RGB32, true,  "RGB32 (full)" }
+		{ GUID_MFVideoFormat_YUY2,  InputPixelFormat::YUY2,  false, "YUY2" },
+		{ GUID_MFVideoFormat_RGB32, InputPixelFormat::RGB32, false, "RGB32" }
 	};
 
 	bool inputConfigured = false;
@@ -498,23 +496,18 @@ bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Code
 			m_height = height;
 			inputConfigured = true;
 			vDebug() << "MediaFoundationVideoWriter: accepted input format" << cand.name
-			         << ( enableHardwareTransforms ? "with HW" : "with SW" )
-			         << "for resolution" << width << "x" << height;
+			         << "with GPU HW for resolution" << width << "x" << height;
 			break;
 		}
 		lastInputHr = candHr;
-		vDebug() << "MediaFoundationVideoWriter: candidate" << cand.name
-		         << ( enableHardwareTransforms ? "(HW)" : "(SW)" )
-		         << "failed with hr =" << QString::asprintf( "0x%08lx", static_cast<unsigned long>( candHr ) );
 	}
 
 	if ( !inputConfigured )
 	{
-		m_errorString = QStringLiteral( "SetInputMediaType failed (0x%1) for %2x%3 (%4)" )
+		m_errorString = QStringLiteral( "SetInputMediaType failed (0x%1) for %2x%3 (HW)" )
 							.arg( static_cast<quint32>( lastInputHr ), 8, 16, QLatin1Char( '0' ) )
 							.arg( width )
-							.arg( height )
-							.arg( enableHardwareTransforms ? QStringLiteral( "HW" ) : QStringLiteral( "SW" ) );
+							.arg( height );
 		m_sinkWriter->Release();
 		m_sinkWriter = nullptr;
 		return false;
@@ -534,7 +527,6 @@ bool MediaFoundationVideoWriter::createPipeline( const QString& nativePath, Code
 #else
 	Q_UNUSED( nativePath )
 	Q_UNUSED( codec )
-	Q_UNUSED( enableHardwareTransforms )
 	Q_UNUSED( width )
 	Q_UNUSED( height )
 	return false;
@@ -562,13 +554,9 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 	m_fps = fps;
 	m_quality = qBound( 1, quality, 100 );
 
-	// Priority 1: 16-aligned width, even height (macroblock boundary for Intel QuickSync & H.264)
+	// Macroblock-aligned resolution (divisible by 16 for H.264 / HEVC hardware encoders)
 	const int alignedW = ( width + 15 ) & ~15;
-	const int alignedH = ( height + 1 ) & ~1;
-
-	// Priority 2: exact even dimensions
-	const int evenW = ( width + 1 ) & ~1;
-	const int evenH = ( height + 1 ) & ~1;
+	const int alignedH = ( height + 15 ) & ~15;
 
 	HRESULT hr = CoInitializeEx( NULL, COINIT_MULTITHREADED );
 	m_comInitialized = SUCCEEDED( hr ) || hr == S_FALSE;
@@ -582,68 +570,39 @@ bool MediaFoundationVideoWriter::open( const QString& filePath, int width, int h
 	}
 	m_mfStarted = true;
 
-	HMODULE hH264 = LoadLibraryW( L"mfh264enc.dll" );
-	if ( hH264 )
-	{
-		FreeLibrary( hH264 );
-	}
-	else
-	{
-		vWarning() << "MediaFoundationVideoWriter: mfh264enc.dll not found in system (Windows N / missing Media Feature Pack)";
-	}
-
 	QFileInfo fileInfo( filePath );
 	QDir().mkpath( fileInfo.absolutePath() );
 	const QString nativePath = QDir::toNativeSeparators( filePath );
 
-	// Build list of resolutions to attempt:
-	// 1. Aligned to 16 width (e.g. 1366 -> 1376, 1920 -> 1920)
-	// 2. Exact even dimensions (if different from 16-aligned)
-	// 3. Fallback standard 1280x720 (720p - guaranteed universal support)
-	QList<QPair<int, int>> resolutionsToTry;
-	resolutionsToTry.append( qMakePair( alignedW, alignedH ) );
-	if ( evenW != alignedW || evenH != alignedH )
+	// 1. Preferred codec with GPU hardware acceleration at native aligned resolution
+	cleanupSinkWriter( nativePath );
+	bool ok = createPipeline( nativePath, m_codec, alignedW, alignedH );
+	if ( ok )
 	{
-		resolutionsToTry.append( qMakePair( evenW, evenH ) );
+		vDebug() << "MediaFoundationVideoWriter: Pipeline created successfully with GPU HW at"
+		         << alignedW << "x" << alignedH;
 	}
-	if ( alignedW != 1280 || alignedH != 720 )
+	else
 	{
-		resolutionsToTry.append( qMakePair( 1280, 720 ) );
-	}
-
-	bool ok = false;
-
-	for ( const auto& res : resolutionsToTry )
-	{
-		const int testW = res.first;
-		const int testH = res.second;
-
-		// 1. Preferred codec with GPU hardware acceleration
-		cleanupSinkWriter( nativePath );
-		ok = createPipeline( nativePath, m_codec, true /* hardware */, testW, testH );
-		if ( ok )
-		{
-			vDebug() << "MediaFoundationVideoWriter: Pipeline created successfully with HW at"
-			         << testW << "x" << testH;
-			break;
-		}
-		vWarning() << "MediaFoundationVideoWriter: HW failed at" << testW << "x" << testH
+		vWarning() << "MediaFoundationVideoWriter: GPU HW failed at" << alignedW << "x" << alignedH
 		           << ":" << m_errorString;
 
-		// 2. If HEVC requested but unsupported by system GPU, fall back to H.264 HW
+		// 2. If HEVC requested but unsupported by system GPU, fall back to H.264 GPU HW
 		if ( m_codec == Codec::H265 )
 		{
 			cleanupSinkWriter( nativePath );
-			ok = createPipeline( nativePath, Codec::H264, true /* hardware */, testW, testH );
+			ok = createPipeline( nativePath, Codec::H264, alignedW, alignedH );
 			if ( ok )
 			{
 				m_codec = Codec::H264;
-				vDebug() << "MediaFoundationVideoWriter: Pipeline created with H.264 HW fallback at"
-				         << testW << "x" << testH;
-				break;
+				vDebug() << "MediaFoundationVideoWriter: Pipeline created with H.264 GPU HW fallback at"
+				         << alignedW << "x" << alignedH;
 			}
-			vWarning() << "MediaFoundationVideoWriter: H.264 HW fallback failed at" << testW << "x" << testH
-			           << ":" << m_errorString;
+			else
+			{
+				vWarning() << "MediaFoundationVideoWriter: H.264 GPU HW fallback failed at" << alignedW << "x" << alignedH
+				           << ":" << m_errorString;
+			}
 		}
 	}
 

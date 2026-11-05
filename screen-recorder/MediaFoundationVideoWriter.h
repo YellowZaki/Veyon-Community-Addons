@@ -39,7 +39,7 @@ private:
 		RGB32
 	};
 
-	bool createPipeline( const QString& nativePath, Codec codec, bool enableHardwareTransforms, int width, int height );
+	bool createPipeline( const QString& nativePath, Codec codec, int width, int height );
 	bool trySetInputType( IMFSinkWriter* pWriter, unsigned long streamIndex, const GUID& subtype, int width, int height, int fps, bool fullAttributes, long& outHr );
 	void cleanupSinkWriter( const QString& nativePath );
 	static void convertRgb32ToNv12( const QImage& img, unsigned char* pDst, int width, int height );
