@@ -8,6 +8,7 @@
 #include "ScreenRecorderConfigurationPage.h"
 #include "ScreenRecorderEncodingWorker.h"
 #include "ComputerControlInterface.h"
+#include "ComputerListModel.h"
 #include "FeatureWorkerManager.h"
 #include "Logger.h"
 #include "PlatformCoreFunctions.h"
@@ -19,8 +20,54 @@
 #include <QDateTime>
 #include <QDir>
 #include <QMessageBox>
+#include <QPainter>
+#include <QPointer>
 #include <QRegularExpression>
+#include <QStyledItemDelegate>
 #include <QToolButton>
+
+class ScreenRecorderItemDelegate : public QStyledItemDelegate
+{
+public:
+	explicit ScreenRecorderItemDelegate( QAbstractItemDelegate* originalDelegate,
+	                                     ScreenRecorderFeaturePlugin* plugin,
+	                                     QObject* parent = nullptr ) :
+		QStyledItemDelegate( parent ),
+		m_originalDelegate( originalDelegate ),
+		m_plugin( plugin )
+	{
+	}
+
+	void paint( QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index ) const override
+	{
+		if ( m_originalDelegate )
+		{
+			m_originalDelegate->paint( painter, option, index );
+		}
+		else
+		{
+			QStyledItemDelegate::paint( painter, option, index );
+		}
+
+		if ( m_plugin )
+		{
+			m_plugin->drawItemOverlay( painter, option, index );
+		}
+	}
+
+	QSize sizeHint( const QStyleOptionViewItem& option, const QModelIndex& index ) const override
+	{
+		if ( m_originalDelegate )
+		{
+			return m_originalDelegate->sizeHint( option, index );
+		}
+		return QStyledItemDelegate::sizeHint( option, index );
+	}
+
+private:
+	QPointer<QAbstractItemDelegate> m_originalDelegate;
+	ScreenRecorderFeaturePlugin* m_plugin{nullptr};
+};
 
 static QString sanitizeFilename( const QString& name )
 {
@@ -184,6 +231,8 @@ bool ScreenRecorderFeaturePlugin::startRecording( VeyonMasterInterface* master,
 		m_master = master;
 	}
 
+	installItemDelegates();
+
 	const QString baseDir = ScreenRecorderUtil::resolvedOutputDirectory( m_configuration );
 	const QString extension = QStringLiteral( ".mp4" );
 
@@ -260,6 +309,16 @@ bool ScreenRecorderFeaturePlugin::startRecording( VeyonMasterInterface* master,
 			controlInterface->setActiveFeatures( features );
 		}
 
+		// Keep recording feature registered even if student computer disconnects, turns off, or reconnects
+		auto rawInterface = controlInterface.data();
+		connect( rawInterface, &ComputerControlInterface::activeFeaturesChanged, this, [this, rawInterface]() {
+			maintainActiveFeature( rawInterface );
+		} );
+		connect( rawInterface, &ComputerControlInterface::stateChanged, this, [this, rawInterface]() {
+			maintainActiveFeature( rawInterface );
+			updateComputerOverlays();
+		} );
+
 		session->worker->start();
 		session->captureTimer->start();
 
@@ -305,11 +364,16 @@ bool ScreenRecorderFeaturePlugin::stopRecording( const ComputerControlInterfaceL
 	}
 
 	QList<ComputerControlInterface*> toStop;
-	if ( computerControlInterfaces.isEmpty() )
+	if ( computerControlInterfaces.size() == 1 )
 	{
-		toStop = m_activeSessions.keys();
+		// Context menu right-click: stop only the single targeted computer
+		auto* target = computerControlInterfaces.first().data();
+		if ( target && m_activeSessions.contains( target ) )
+		{
+			toStop.append( target );
+		}
 	}
-	else
+	else if ( !computerControlInterfaces.isEmpty() )
 	{
 		for ( const auto& controlInterface : computerControlInterfaces )
 		{
@@ -318,12 +382,12 @@ bool ScreenRecorderFeaturePlugin::stopRecording( const ComputerControlInterfaceL
 				toStop.append( controlInterface.data() );
 			}
 		}
-		// If targets were provided but none matched (e.g. toolbar click passed all filtered computers),
-		// stop all active sessions
-		if ( toStop.isEmpty() )
-		{
-			toStop = m_activeSessions.keys();
-		}
+	}
+
+	// If no specific targets matched (or called with empty list via global stop), stop all active sessions
+	if ( toStop.isEmpty() )
+	{
+		toStop = m_activeSessions.keys();
 	}
 
 	vDebug() << "Stopping screen recording on" << toStop.size() << "session(s), remaining:" << ( m_activeSessions.size() - toStop.size() );
@@ -338,6 +402,8 @@ bool ScreenRecorderFeaturePlugin::stopRecording( const ComputerControlInterfaceL
 			continue;
 		}
 
+		disconnect( ifacePtr, nullptr, this, nullptr );
+
 		if ( session->captureTimer )
 		{
 			session->captureTimer->stop();
@@ -349,7 +415,7 @@ bool ScreenRecorderFeaturePlugin::stopRecording( const ComputerControlInterfaceL
 		{
 			session->controlInterface->setUpdateMode( session->originalUpdateMode );
 
-			// Remove active feature badge so the red dot disappears from the thumbnail
+			// Remove active feature badge so the dot disappears from the thumbnail
 			auto features = session->controlInterface->activeFeatures();
 			features.removeAll( m_screenRecorderFeature.uid() );
 			session->controlInterface->setActiveFeatures( features );
@@ -444,19 +510,13 @@ void ScreenRecorderFeaturePlugin::updateToolbarButton()
 	button->setText( QStringLiteral( "%1\n%2" ).arg( tr( "Stop recording" ), timeStr ) );
 
 	// Ensure all active recording sessions maintain their activeFeatures badge
-	for ( auto it = m_activeSessions.constBegin(); it != m_activeSessions.constEnd(); ++it )
+	for ( auto* iface : m_activeSessions.keys() )
 	{
-		const auto& session = it.value();
-		if ( session && session->controlInterface )
-		{
-			auto features = session->controlInterface->activeFeatures();
-			if ( !features.contains( m_screenRecorderFeature.uid() ) )
-			{
-				features.append( m_screenRecorderFeature.uid() );
-				session->controlInterface->setActiveFeatures( features );
-			}
-		}
+		maintainActiveFeature( iface );
 	}
+
+	installItemDelegates();
+	updateComputerOverlays();
 }
 
 void ScreenRecorderFeaturePlugin::resetToolbarButton()
@@ -481,6 +541,8 @@ void ScreenRecorderFeaturePlugin::updateComputerOverlays()
 		return;
 	}
 
+	installItemDelegates();
+
 	const auto views = m_master->mainWindow()->findChildren<QAbstractItemView*>();
 	for ( auto view : views )
 	{
@@ -489,6 +551,90 @@ void ScreenRecorderFeaturePlugin::updateComputerOverlays()
 			view->viewport()->update();
 		}
 	}
+}
+
+void ScreenRecorderFeaturePlugin::installItemDelegates()
+{
+	if ( !m_master || !m_master->mainWindow() )
+	{
+		return;
+	}
+
+	const auto views = m_master->mainWindow()->findChildren<QAbstractItemView*>();
+	for ( auto view : views )
+	{
+		if ( view && !view->property( "ScreenRecorderDelegateInstalled" ).toBool() )
+		{
+			auto originalDelegate = view->itemDelegate();
+			auto wrapperDelegate = new ScreenRecorderItemDelegate( originalDelegate, this, view );
+			view->setItemDelegate( wrapperDelegate );
+			view->setProperty( "ScreenRecorderDelegateInstalled", true );
+		}
+	}
+}
+
+void ScreenRecorderFeaturePlugin::maintainActiveFeature( ComputerControlInterface* iface )
+{
+	if ( m_updatingActiveFeatures || !iface || !m_activeSessions.contains( iface ) )
+	{
+		return;
+	}
+
+	auto features = iface->activeFeatures();
+	if ( !features.contains( m_screenRecorderFeature.uid() ) )
+	{
+		m_updatingActiveFeatures = true;
+		features.append( m_screenRecorderFeature.uid() );
+		iface->setActiveFeatures( features );
+		m_updatingActiveFeatures = false;
+	}
+}
+
+void ScreenRecorderFeaturePlugin::drawItemOverlay( QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index )
+{
+	if ( !painter || !index.isValid() || !index.model() )
+	{
+		return;
+	}
+
+	const auto controlInterface = index.model()->data( index, ComputerListModel::ControlInterfaceRole )
+	                                  .value<ComputerControlInterface::Pointer>();
+	if ( !controlInterface || !m_activeSessions.contains( controlInterface.data() ) )
+	{
+		return;
+	}
+
+	// When connected, Veyon's native drawFeatureIcons already paints the red badge.
+	// We paint our orange badge only when the computer is offline/disconnected.
+	const bool isOffline = ( controlInterface->state() != ComputerControlInterface::State::Connected );
+	if ( !isOffline )
+	{
+		return;
+	}
+
+	const int x = option.rect.topLeft().x() + 8;
+	const int y = option.rect.topLeft().y() + 8;
+	constexpr int size = 32;
+
+	painter->save();
+	painter->setRenderHint( QPainter::Antialiasing );
+
+	// 1. Semi-transparent background pill with vibrant orange border
+	painter->setBrush( QColor( 255, 255, 255, 220 ) );
+	painter->setPen( QPen( QColor( 235, 120, 20 ), 1.5 ) );
+	painter->drawRoundedRect( QRect( x, y, size, size ), 6, 6 );
+
+	// 2. Solid orange circle badge
+	painter->setBrush( QColor( 245, 130, 20 ) );
+	painter->setPen( Qt::NoPen );
+	painter->drawEllipse( QRect( x + 5, y + 5, 22, 22 ) );
+
+	// 3. Crisp white pause symbol "||"
+	painter->setBrush( Qt::white );
+	painter->drawRoundedRect( QRect( x + 11, y + 10, 3, 12 ), 1, 1 );
+	painter->drawRoundedRect( QRect( x + 18, y + 10, 3, 12 ), 1, 1 );
+
+	painter->restore();
 }
 
 bool ScreenRecorderFeaturePlugin::handleFeatureMessage( VeyonServerInterface& server,

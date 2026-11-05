@@ -12,6 +12,9 @@
 #include "FeatureProviderInterface.h"
 #include "ScreenRecorderConfiguration.h"
 
+class QPainter;
+class QStyleOptionViewItem;
+class QModelIndex;
 class ScreenRecorderEncodingWorker;
 
 class ScreenRecorderFeaturePlugin : public QObject,
@@ -88,6 +91,8 @@ public:
 
 	ConfigurationPage* createConfigurationPage() override;
 
+	void drawItemOverlay( QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index );
+
 private Q_SLOTS:
 	void updateToolbarButton();
 
@@ -106,6 +111,8 @@ private:
 
 	void resetToolbarButton();
 	void updateComputerOverlays();
+	void installItemDelegates();
+	void maintainActiveFeature( ComputerControlInterface* iface );
 
 	QString generateOutputFilePath( const QString& baseDir,
 								   const ComputerControlInterface::Pointer& controlInterface,
@@ -116,6 +123,7 @@ private:
 	const FeatureList m_features;
 
 	bool m_isRecording{false};
+	bool m_updatingActiveFeatures{false};
 	QElapsedTimer m_recordingElapsedTimer;
 	QTimer* m_buttonUpdateTimer{nullptr};
 	VeyonMasterInterface* m_master{nullptr};
