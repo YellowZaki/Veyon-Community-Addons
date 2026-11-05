@@ -315,8 +315,7 @@ bool ScreenRecorderFeaturePlugin::startRecording( VeyonMasterInterface* master,
 			maintainActiveFeature( rawInterface );
 		} );
 		connect( rawInterface, &ComputerControlInterface::stateChanged, this, [this, rawInterface]() {
-			maintainActiveFeature( rawInterface );
-			updateComputerOverlays();
+			onComputerStateChanged( rawInterface );
 		} );
 
 		session->worker->start();
@@ -509,6 +508,23 @@ void ScreenRecorderFeaturePlugin::updateToolbarButton()
 	button->setIcon( QIcon( QStringLiteral( ":/screenrecorder/resources/media-record-active.png" ) ) );
 	button->setText( QStringLiteral( "%1\n%2" ).arg( tr( "Stop recording" ), timeStr ) );
 
+	// Check for disconnected computers if autoStopOnDisconnect is enabled
+	if ( m_configuration.autoStopOnDisconnect() )
+	{
+		for ( auto* iface : m_activeSessions.keys() )
+		{
+			if ( iface && iface->state() != ComputerControlInterface::State::Connected )
+			{
+				vInfo() << "ScreenRecorder: periodic auto-stopping recording for disconnected computer" << iface->computerName();
+				const auto session = m_activeSessions.value( iface );
+				if ( session && session->controlInterface )
+				{
+					stopRecording( { session->controlInterface } );
+				}
+			}
+		}
+	}
+
 	// Ensure all active recording sessions maintain their activeFeatures badge
 	for ( auto* iface : m_activeSessions.keys() )
 	{
@@ -580,6 +596,11 @@ void ScreenRecorderFeaturePlugin::maintainActiveFeature( ComputerControlInterfac
 		return;
 	}
 
+	if ( m_configuration.autoStopOnDisconnect() && iface->state() != ComputerControlInterface::State::Connected )
+	{
+		return;
+	}
+
 	auto features = iface->activeFeatures();
 	if ( !features.contains( m_screenRecorderFeature.uid() ) )
 	{
@@ -590,9 +611,40 @@ void ScreenRecorderFeaturePlugin::maintainActiveFeature( ComputerControlInterfac
 	}
 }
 
+void ScreenRecorderFeaturePlugin::onComputerStateChanged( ComputerControlInterface* iface )
+{
+	if ( !iface || !m_activeSessions.contains( iface ) )
+	{
+		return;
+	}
+
+	if ( iface->state() != ComputerControlInterface::State::Connected )
+	{
+		if ( m_configuration.autoStopOnDisconnect() )
+		{
+			vInfo() << "ScreenRecorder: auto-stopping recording for disconnected computer" << iface->computerName();
+			const auto session = m_activeSessions.value( iface );
+			if ( session && session->controlInterface )
+			{
+				stopRecording( { session->controlInterface } );
+			}
+			return;
+		}
+	}
+
+	maintainActiveFeature( iface );
+	updateComputerOverlays();
+}
+
 void ScreenRecorderFeaturePlugin::drawItemOverlay( QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index )
 {
 	if ( !painter || !index.isValid() || !index.model() )
+	{
+		return;
+	}
+
+	// If autoStopOnDisconnect is enabled, the recording terminates on disconnect and no pause overlay is drawn
+	if ( m_configuration.autoStopOnDisconnect() )
 	{
 		return;
 	}

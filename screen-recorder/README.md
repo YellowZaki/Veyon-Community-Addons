@@ -99,6 +99,7 @@ Abre **Veyon Configurator** -> pestaña **Complementos / Add-ons** -> **Grabador
 | **Formato de codificación** | `MP4 (H.264)` | Formato del archivo (MP4 H.264 o H.265 vía Media Foundation). |
 | **Tasa de bits (Bitrate)** | `2500` kbps | Calidad y compresión del video H.264. |
 | **Notificar a los alumnos** | Desactivado (`false`) | Muestra un aviso en el escritorio del alumno informándole de la grabación. |
+| **Detener al apagar/desconectar** | Desactivado (`false`) | Finaliza y guarda automáticamente el video del alumno cuando se apaga su PC o se detiene Veyon (sin pasar por estado de pausa). |
 
 ---
 

@@ -22,7 +22,8 @@
 	OP( ScreenRecorderConfiguration, m_configuration, int, framesPerSecond, setFramesPerSecond, "FramesPerSecond", "ScreenRecorder", 15, Configuration::Property::Flag::Standard ) \
 	OP( ScreenRecorderConfiguration, m_configuration, int, format, setFormat, "Format", "ScreenRecorder", 0, Configuration::Property::Flag::Standard ) \
 	OP( ScreenRecorderConfiguration, m_configuration, int, quality, setQuality, "Quality", "ScreenRecorder", 70, Configuration::Property::Flag::Standard ) \
-	OP( ScreenRecorderConfiguration, m_configuration, bool, notifyUsers, setNotifyUsers, "NotifyUsers", "ScreenRecorder", false, Configuration::Property::Flag::Standard )
+	OP( ScreenRecorderConfiguration, m_configuration, bool, notifyUsers, setNotifyUsers, "NotifyUsers", "ScreenRecorder", false, Configuration::Property::Flag::Standard ) \
+	OP( ScreenRecorderConfiguration, m_configuration, bool, autoStopOnDisconnect, setAutoStopOnDisconnect, "AutoStopOnDisconnect", "ScreenRecorder", false, Configuration::Property::Flag::Standard )
 
 DECLARE_CONFIG_PROXY(ScreenRecorderConfiguration, FOREACH_SCREENRECORDER_CONFIG_PROPERTY)
 

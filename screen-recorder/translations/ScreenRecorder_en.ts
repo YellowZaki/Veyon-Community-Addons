@@ -161,6 +161,10 @@
         <translation>Notify users when their screen is recorded</translation>
     </message>
     <message>
+        <source>Stop recording student when computer is turned off or Veyon is stopped</source>
+        <translation>Stop recording student when computer is turned off or Veyon is stopped</translation>
+    </message>
+    <message>
         <source>Select Output Directory</source>
         <translation>Select Output Directory</translation>
     </message>

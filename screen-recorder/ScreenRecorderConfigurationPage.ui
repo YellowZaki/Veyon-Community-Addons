@@ -284,6 +284,13 @@
         </property>
        </widget>
       </item>
+      <item>
+       <widget class="QCheckBox" name="autoStopOnDisconnect">
+        <property name="text">
+         <string>Stop recording student when computer is turned off or Veyon is stopped</string>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>

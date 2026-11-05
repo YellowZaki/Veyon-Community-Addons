@@ -161,6 +161,10 @@
         <translation>Notificar a los alumnos cuando se grabe su pantalla</translation>
     </message>
     <message>
+        <source>Stop recording student when computer is turned off or Veyon is stopped</source>
+        <translation>Detener grabación del alumno cuando se apaga su PC o se detiene veyon</translation>
+    </message>
+    <message>
         <source>Select Output Directory</source>
         <translation>Seleccionar directorio de salida</translation>
     </message>

@@ -113,6 +113,7 @@ private:
 	void updateComputerOverlays();
 	void installItemDelegates();
 	void maintainActiveFeature( ComputerControlInterface* iface );
+	void onComputerStateChanged( ComputerControlInterface* iface );
 
 	QString generateOutputFilePath( const QString& baseDir,
 								   const ComputerControlInterface::Pointer& controlInterface,
